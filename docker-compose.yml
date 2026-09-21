@@ -1,0 +1,83 @@
+# Development stack: PostgreSQL, the Django API with autoreload, and Vite's
+# dev server with hot module replacement.
+#
+#   docker compose up --build
+#   -> teacher app on http://localhost:5173, API on http://localhost:8000
+#
+# The Vite dev server proxies /api to the API container, so the browser still
+# sees a single origin (see frontend/vite.config.ts).
+
+name: caricue-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-caricue}
+      POSTGRES_USER: ${POSTGRES_USER:-caricue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caricue}
+    volumes:
+      - caricue_dev_db:/var/lib/postgresql/data
+    ports:
+      # Exposed so you can point psql or a GUI at it during development.
+      - '${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-caricue} -d ${POSTGRES_DB:-caricue}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    command:
+      - python
+      - manage.py
+      - runserver
+      - 0.0.0.0:8000
+    environment:
+      DJANGO_DEBUG: '1'
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-only-insecure-secret-key-change-me}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api,0.0.0.0}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      DJANGO_DB_ENGINE: postgres
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-caricue}
+      POSTGRES_USER: ${POSTGRES_USER:-caricue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caricue}
+      # Students scan a QR code with their phone, so this must be an address
+      # their device can reach — swap localhost for your machine's LAN IP.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5173}
+      CARICUE_INSIGHT_PROVIDER: ${CARICUE_INSIGHT_PROVIDER:-caricue.insights.providers.RuleBasedInsightProvider}
+      CARICUE_LLM_API_KEY: ${CARICUE_LLM_API_KEY:-}
+      # Seeds the demo teacher, class, activity and sessions on first start.
+      CARICUE_SEED_DEMO: ${CARICUE_SEED_DEMO:-1}
+      DJANGO_COLLECTSTATIC_ON_START: '0'
+    volumes:
+      # Source is mounted so `runserver` reloads on save.
+      - ./backend:/app
+    ports:
+      - '8000:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    volumes:
+      - ./frontend:/app
+      - caricue_dev_node_modules:/app/node_modules
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+
+volumes:
+  caricue_dev_db:
+  caricue_dev_node_modules:

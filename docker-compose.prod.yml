@@ -1,0 +1,64 @@
+# Production-oriented stack: PostgreSQL with a persistent volume, Gunicorn,
+# and Nginx serving the built SPA while proxying /api to the API.
+#
+#   cp .env.example .env      # then edit it
+#   docker compose -f docker-compose.prod.yml up --build -d
+#
+# Only Nginx publishes a port. Terminate TLS in front of it (see the HTTPS
+# section of README.md).
+
+name: caricue
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Deterministic collation, so ordering does not change with the host.
+      POSTGRES_INITDB_ARGS: '--lc-collate=C --lc-ctype=C'
+    volumes:
+      - caricue_db:/var/lib/postgresql/data
+      # Bind mount for pg_dump output; see the backup section of the README.
+      - ./deploy/backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: '0'
+      POSTGRES_HOST: db
+      DJANGO_STATIC_ROOT: /var/www/caricue/static
+    volumes:
+      - caricue_static:/var/www/caricue/static
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    # Command comes from the image: gunicorn behind the migrate/collectstatic
+    # entrypoint.
+
+  web:
+    build:
+      # Root context: the image also needs deploy/nginx/caricue.conf.
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - '${HTTP_PORT:-8080}:80'
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  caricue_db:
+  caricue_static:

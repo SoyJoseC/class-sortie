@@ -1,0 +1,8 @@
+# Runtime dependencies (source manifest).
+# Regenerate the locked file with:
+#   pip-compile --generate-hashes -o requirements.txt requirements.in
+Django==5.2.17
+djangorestframework==3.16.1
+psycopg[binary]==3.2.13
+gunicorn==23.0.0
+whitenoise==6.11.0
