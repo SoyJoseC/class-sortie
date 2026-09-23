@@ -37,9 +37,23 @@ auth_patterns = [
     path("login/", account_views.LoginView.as_view(), name="auth-login"),
     path("logout/", account_views.LogoutView.as_view(), name="auth-logout"),
     path("me/", account_views.CurrentTeacherView.as_view(), name="auth-me"),
+    path("google/login/", account_views.google_login, name="auth-google-login"),
+    path("google/callback/", account_views.google_callback, name="auth-google-callback"),
+    path("student/me/", account_views.student_me, name="auth-student-me"),
+    path("student/logout/", account_views.student_logout, name="auth-student-logout"),
 ]
 
 public_patterns = [
+    path(
+        "classes/<str:invite_token>/",
+        classroom_views.public_class_detail,
+        name="public-class-detail",
+    ),
+    path(
+        "classes/<str:invite_token>/join/",
+        classroom_views.public_class_join,
+        name="public-class-join",
+    ),
     path("sessions/lookup/", live_views.public_code_lookup, name="public-code-lookup"),
     path(
         "sessions/<str:public_token>/",

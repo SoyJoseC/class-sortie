@@ -167,7 +167,29 @@ function ActivityBuilder({
             lesson.
           </Text>
         </Box>
-        <HStack>
+        <HStack flexWrap="wrap">
+          {isEditing && activity && (
+            <>
+              <Button
+                as="a"
+                href={`/api/activities/${activity.id}/export.csv`}
+                download
+                variant="ghost"
+                size="sm"
+              >
+                Export CSV
+              </Button>
+              <Button
+                as="a"
+                href={`/api/activities/${activity.id}/export.json`}
+                download
+                variant="ghost"
+                size="sm"
+              >
+                Export JSON
+              </Button>
+            </>
+          )}
           <Button variant="outline" onClick={handleSaveDraft} isLoading={isSaving}>
             Save draft
           </Button>
@@ -344,6 +366,15 @@ function ActivityBuilder({
                         <Text fontSize="sm" color="gray.600">
                           Links responses to your roster. Requires school identifiers on
                           students.
+                        </Text>
+                      </Box>
+                    </Radio>
+                    <Radio value="google_account" colorScheme="cariteal">
+                      <Box>
+                        <Text fontWeight="600">School Google account</Text>
+                        <Text fontSize="sm" color="gray.600">
+                          Students sign in with Google. Their school email must be on the
+                          class roster.
                         </Text>
                       </Box>
                     </Radio>

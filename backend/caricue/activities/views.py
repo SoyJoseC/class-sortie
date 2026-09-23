@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 from django.db.models import Count, Prefetch, Q
-from rest_framework import status, viewsets
+from django.http import HttpResponse
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from caricue.classroom.models import Classroom
 from caricue.core.permissions import OwnedQuerysetMixin
 from caricue.live.models import LiveSession, SessionStatus
 from caricue.live.serializers import LiveSessionSerializer
 from caricue.live.services import launch_session
 
+from .activity_export import (
+    activity_template_csv,
+    export_activity_csv,
+    export_activity_json,
+)
+from .activity_import import ActivityImportError, import_activity_file
 from .models import Activity, Choice, Question
 from .serializers import (
     ActivityListSerializer,
@@ -19,6 +27,11 @@ from .serializers import (
     ChoiceSerializer,
     QuestionSerializer,
 )
+
+
+class ActivityImportSerializer(serializers.Serializer):
+    classroom = serializers.PrimaryKeyRelatedField(queryset=Classroom.objects.all())
+    file = serializers.FileField()
 
 
 class ActivityViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
@@ -68,6 +81,66 @@ class ActivityViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
                 "questions": ActivityPreviewQuestionSerializer(questions, many=True).data,
             }
         )
+
+    @action(detail=False, methods=["get"], url_path="template.csv")
+    def template_csv(self, request: Request) -> HttpResponse:
+        response = HttpResponse(
+            activity_template_csv(),
+            content_type="text/csv; charset=utf-8",
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="classsortie-activity-template.csv"'
+        )
+        return response
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_activity(self, request: Request) -> Response:
+        serializer = ActivityImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        classroom = serializer.validated_data["classroom"]
+        if classroom.teacher_id != request.user.pk:
+            return Response(
+                {"detail": "Class not found.", "code": "not_found", "errors": {}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        upload = serializer.validated_data["file"]
+        try:
+            result = import_activity_file(
+                classroom=classroom,
+                raw=upload.read(),
+                filename=upload.name,
+                request=request,
+            )
+        except ActivityImportError as exc:
+            return Response(
+                {"detail": str(exc), "code": "import_failed", "errors": {}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if result.activity_id is None:
+            return Response(result.as_dict(), status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.as_dict(), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="export.csv")
+    def export_csv(self, request: Request, pk: str | None = None) -> HttpResponse:
+        activity = self.get_object()
+        response = HttpResponse(
+            export_activity_csv(activity), content_type="text/csv; charset=utf-8"
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="activity-{activity.pk}.csv"'
+        )
+        return response
+
+    @action(detail=True, methods=["get"], url_path="export.json")
+    def export_json(self, request: Request, pk: str | None = None) -> HttpResponse:
+        activity = self.get_object()
+        response = HttpResponse(
+            export_activity_json(activity), content_type="application/json; charset=utf-8"
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="activity-{activity.pk}.json"'
+        )
+        return response
 
     @action(detail=True, methods=["post"])
     def launch(self, request: Request, pk: str | None = None) -> Response:

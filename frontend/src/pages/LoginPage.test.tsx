@@ -110,4 +110,14 @@ describe('LoginPage', () => {
       '/join'
     );
   });
+
+  it('offers Google sign-in for teachers', () => {
+    stubFetch(() => ({ body: {} }));
+    renderWithProviders(<LoginPage />);
+
+    expect(screen.getByRole('link', { name: /continue with google/i })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/api/auth/google/login/?')
+    );
+  });
 });

@@ -11,9 +11,12 @@ import { Brand } from './Brand';
 export function StudentShell({
   children,
   subtitle,
+  googleAccountMode = false,
 }: {
   children: ReactNode;
   subtitle?: string;
+  /** When true, footer explains school Google sign-in instead of anonymous join. */
+  googleAccountMode?: boolean;
 }) {
   return (
     <Flex direction="column" minH="100vh" bg="sand.100">
@@ -39,7 +42,9 @@ export function StudentShell({
       <Box as="footer" py={4}>
         <Container maxW="30rem" px={4}>
           <Text fontSize="xs" color="gray.600">
-            Your answers go to your teacher for this activity only. No account needed.
+            {googleAccountMode
+              ? 'Sign in with your school Google account for this activity.'
+              : 'Your answers go to your teacher for this activity only. No account needed.'}
           </Text>
         </Container>
       </Box>

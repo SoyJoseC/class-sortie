@@ -12,6 +12,8 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils import timezone
 
+from caricue.core.models import TimeStampedModel
+
 
 class TeacherManager(BaseUserManager):
     use_in_migrations = True
@@ -43,6 +45,13 @@ class Teacher(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True, max_length=254)
     full_name = models.CharField(max_length=150)
     school_name = models.CharField(max_length=150, blank=True)
+    google_sub = models.CharField(
+        max_length=255,
+        blank=True,
+        unique=True,
+        null=True,
+        help_text="Google account subject id when linked via OAuth.",
+    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
@@ -69,3 +78,17 @@ class Teacher(AbstractBaseUser, PermissionsMixin):
     @property
     def owner_teacher_id(self) -> int | None:
         return self.pk
+
+
+class StudentAccount(TimeStampedModel):
+    """A student who signed in with Google — distinct from roster `Student` rows."""
+
+    email = models.EmailField(unique=True, max_length=254)
+    full_name = models.CharField(max_length=150)
+    google_sub = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        ordering = ["email"]
+
+    def __str__(self) -> str:
+        return self.email

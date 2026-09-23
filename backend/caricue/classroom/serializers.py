@@ -11,6 +11,7 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
     roster_size = serializers.SerializerMethodField()
     activity_count = serializers.SerializerMethodField()
+    class_join_url = serializers.CharField(read_only=True)
 
     class Meta:
         model = Classroom
@@ -21,12 +22,21 @@ class ClassroomSerializer(serializers.ModelSerializer):
             "level",
             "academic_period",
             "is_active",
+            "self_enrollment_enabled",
+            "invite_token",
+            "class_join_url",
             "roster_size",
             "activity_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "invite_token",
+            "class_join_url",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_roster_size(self, classroom: Classroom) -> int:
         annotated = getattr(classroom, "enrolled_count", None)

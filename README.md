@@ -247,7 +247,9 @@ Everything lives under `/api/`. Responses are JSON. Errors use one envelope:
 | `GET` | `/api/config/` | Client limits, poll cadence, whether AI is on |
 | `GET` | `/api/public/sessions/lookup/?code=ABC123` | Short code → public token (30/min) |
 | `GET` | `/api/public/sessions/{token}/` | The activity as a student sees it |
-| `POST` | `/api/public/sessions/{token}/join/` | Join with a name or roster id (20/min) |
+| `GET` | `/api/public/classes/{invite_token}/` | Class summary for class QR join |
+| `POST` | `/api/public/classes/{invite_token}/join/` | Self-enrol with a student Google session (20/min) |
+| `POST` | `/api/public/sessions/{token}/join/` | Join with a name, roster id, or Google session (20/min) |
 | `POST` | `/api/public/sessions/{token}/submit/` | Submit all answers, once (20/min) |
 
 The public session payload deliberately omits `is_correct` and
@@ -262,6 +264,10 @@ The public session payload deliberately omits `is_correct` and
 | `POST` | `/api/auth/login/` | Start a session (10/min) |
 | `POST` | `/api/auth/logout/` | End the session |
 | `GET` `PATCH` | `/api/auth/me/` | Read or update the current teacher |
+| `GET` | `/api/auth/google/login/?role=teacher\|student&next=…` | Start Google OAuth (redirect) |
+| `GET` | `/api/auth/google/callback/` | OAuth callback (redirect back to SPA) |
+| `GET` | `/api/auth/student/me/` | Current signed-in student (Google) |
+| `POST` | `/api/auth/student/logout/` | End the student session |
 
 ### Teacher resources — session required, owner-scoped
 
@@ -281,6 +287,10 @@ The public session payload deliberately omits `is_correct` and
 | `GET` `PUT` `DELETE` | `/api/activities/{id}/` | Retrieve, replace, delete an activity |
 | `GET` | `/api/activities/{id}/preview/` | The student view, for checking wording |
 | `POST` | `/api/activities/{id}/launch/` | Publish and open a live session |
+| `GET` | `/api/activities/template.csv/` | Download a sample activity CSV |
+| `POST` | `/api/activities/import/` | Import CSV or JSON into a draft (multipart) |
+| `GET` | `/api/activities/{id}/export.csv/` | Export activity as CSV |
+| `GET` | `/api/activities/{id}/export.json/` | Export activity as JSON |
 | `GET` | `/api/activities/{id}/sessions/` | Sessions launched from an activity |
 | `GET` `POST` | `/api/questions/`, `/api/choices/` | Question and choice management |
 | `GET` | `/api/sessions/?status=open` | List sessions, filterable |
@@ -299,6 +309,26 @@ returns `404`, not `403` — the existence of the row is not disclosed.
 **Calling it from a script.** Fetch `/api/auth/csrf/`, keep the cookie jar, and
 send the `caricue_csrftoken` value as an `X-CSRFToken` header on every unsafe
 request.
+
+### Google OAuth
+
+Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and optionally
+`OAUTH_ALLOWED_EMAIL_DOMAINS` in `.env`. Redirect URIs in Google Cloud Console
+must include `{PUBLIC_BASE_URL}/api/auth/google/callback/`.
+
+Teachers can sign in with Google or email/password. Students get a lightweight
+`StudentAccount` session when they sign in for class QR enrolment or for live
+sessions launched with `google_account` identity mode. The domain allowlist is
+enforced server-side after Google returns the profile.
+
+### Activity import (CSV)
+
+One activity per file. Required columns on every row: `activity_title`,
+`activity_topic`, `question_position`, `question_type`, `prompt`, `is_required`,
+`collect_confidence`. Multiple-choice rows also need `choice_position`,
+`choice_text`, and `is_correct`; short-text rows may include pipe-separated
+`accepted_answers`. Download `/api/activities/template.csv/` for a worked
+example. Import always creates a **draft** in the classroom you select.
 
 ---
 
@@ -477,9 +507,10 @@ docker compose -f docker-compose.prod.yml exec -T db \
 
 ## Privacy and security
 
-- **Students have no accounts.** A participant is a display name or a roster
-  identifier the teacher already had. No email, no device identifier, no
-  tracking.
+- **Students usually have no teacher-style accounts.** Display-name and
+  roster-identifier sessions stay anonymous. Optional Google sign-in creates a
+  separate student session used only for class enrolment and
+  `google_account` sessions; it is not mixed with teacher auth.
 - **Minimal student data.** A student row is a display name plus an *optional*
   school identifier and *optional* email.
 - **The roster is never public.** Roster-identifier join validates against the

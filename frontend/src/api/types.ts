@@ -3,7 +3,7 @@
 export type QuestionType = 'multiple_choice' | 'short_text' | 'confidence';
 export type ActivityStatus = 'draft' | 'published';
 export type SessionStatus = 'open' | 'closed';
-export type IdentityMode = 'display_name' | 'roster_identifier';
+export type IdentityMode = 'display_name' | 'roster_identifier' | 'google_account';
 export type PlanImpact = 'confirmed' | 'changed' | 'unclear';
 
 /** Uniform error envelope produced by `core.exceptions.safe_exception_handler`. */
@@ -44,10 +44,38 @@ export interface Classroom {
   level: string;
   academic_period: string;
   is_active: boolean;
+  self_enrollment_enabled: boolean;
+  invite_token: string;
+  class_join_url: string;
   roster_size: number;
   activity_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface StudentAccount {
+  id: number;
+  email: string;
+  full_name: string;
+}
+
+export interface PublicClassInfo {
+  name: string;
+  subject: string;
+  level: string;
+  teacher_name: string;
+  self_enrollment_enabled: boolean;
+}
+
+export interface ClassJoinResult {
+  classroom_name: string;
+  student_id: number;
+  already_enrolled: boolean;
+}
+
+export interface ActivityImportResult {
+  activity_id: number | null;
+  row_errors: { line: number; message: string }[];
 }
 
 export interface Student {

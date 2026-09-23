@@ -17,6 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response as ApiResponse
 from rest_framework.views import APIView
 
+from caricue.accounts.student_account import get_student_account
 from caricue.activities.follow_up import create_follow_up_activity
 from caricue.core.permissions import OwnedQuerysetMixin
 from caricue.core.throttling import (
@@ -30,7 +31,13 @@ from caricue.insights.providers import generate_suggestions
 from caricue.insights.service import build_session_insights
 from caricue.insights.topics import topic_for_session
 
-from .models import LiveSession, Participant, SessionStatus, TeacherReflection
+from .models import (
+    IdentityMode,
+    LiveSession,
+    Participant,
+    SessionStatus,
+    TeacherReflection,
+)
 from .serializers import (
     LiveSessionSerializer,
     ParticipantSerializer,
@@ -278,12 +285,24 @@ class PublicJoinView(APIView):
 
     def post(self, request: Request, public_token: str) -> ApiResponse:
         session = _get_open_or_any_session(public_token)
-        serializer = PublicJoinSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if session.identity_mode == IdentityMode.GOOGLE_ACCOUNT:
+            account = get_student_account(request)
+            if account is None:
+                return ApiResponse(
+                    {
+                        "detail": "Sign in with your school Google account to join.",
+                        "code": "google_sign_in_required",
+                        "errors": {},
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            identifier = account.email
+        else:
+            serializer = PublicJoinSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            identifier = serializer.validated_data["identifier"]
         try:
-            result = join_session(
-                session=session, identifier=serializer.validated_data["identifier"]
-            )
+            result = join_session(session=session, identifier=identifier)
         except SubmissionError as exc:
             return _submission_error_response(exc)
 

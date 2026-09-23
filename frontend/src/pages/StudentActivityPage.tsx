@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   AlertIcon,
@@ -21,13 +21,15 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { PublicAnswer, PublicQuestion, PublicSession } from '@/api/types';
 import {
   useJoinSessionMutation,
   usePublicSessionQuery,
+  useStudentMeQuery,
   useSubmitAnswersMutation,
 } from '@/api/caricueApi';
+import { googleLoginUrl, oauthErrorMessage } from '@/utils/googleAuth';
 import { errorMessage } from '@/api/baseQuery';
 import { ErrorState, LoadingState } from '@/components/StateViews';
 import { StudentShell } from '@/components/StudentShell';
@@ -49,6 +51,8 @@ interface DraftAnswer {
  */
 export function StudentActivityPage() {
   const { token = '' } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const oauthError = oauthErrorMessage(searchParams.get('oauth_error'));
   const session = usePublicSessionQuery(token);
 
   const [phase, setPhase] = useState<Phase>('identify');
@@ -62,6 +66,26 @@ export function StudentActivityPage() {
 
   const [join, joinState] = useJoinSessionMutation();
   const [submit, submitState] = useSubmitAnswersMutation();
+
+  const googleMode = session.data?.identity_mode === 'google_account';
+  const studentMe = useStudentMeQuery(undefined, { skip: !googleMode });
+
+  useEffect(() => {
+    if (!googleMode || phase !== 'identify' || !studentMe.data || joinState.isLoading) {
+      return;
+    }
+    void join({ token })
+      .unwrap()
+      .then((result) => {
+        setParticipantToken(result.participant_token);
+        setLabel(result.display_label);
+        setShowErrors(false);
+        setPhase('answer');
+      })
+      .catch(() => {
+        // Rendered inline.
+      });
+  }, [googleMode, phase, studentMe.data, joinState.isLoading, join, token]);
 
   if (session.isLoading) return <LoadingState label="Loading activity…" />;
   if (session.isError || !session.data) {
@@ -119,9 +143,11 @@ export function StudentActivityPage() {
   async function handleJoin(event: React.FormEvent) {
     event.preventDefault();
     setShowErrors(true);
-    if (!identifier.trim()) return;
+    if (!googleMode && !identifier.trim()) return;
     try {
-      const result = await join({ token, identifier: identifier.trim() }).unwrap();
+      const result = await join(
+        googleMode ? { token } : { token, identifier: identifier.trim() }
+      ).unwrap();
       setParticipantToken(result.participant_token);
       setLabel(result.display_label);
       setShowErrors(false);
@@ -195,8 +221,10 @@ export function StudentActivityPage() {
   }
 
   if (phase === 'identify') {
+    const nextUrl = `/s/${token}`;
+
     return (
-      <StudentShell subtitle={data.class_name}>
+      <StudentShell subtitle={data.class_name} googleAccountMode={googleMode}>
         <Box>
           <Heading size="md" color="ocean.800">
             {data.activity_title}
@@ -212,6 +240,64 @@ export function StudentActivityPage() {
           </Text>
         </Box>
 
+        {oauthError && (
+          <Alert status="error" borderRadius="md">
+            <AlertIcon />
+            <Text fontSize="sm">{oauthError}</Text>
+          </Alert>
+        )}
+
+        {googleMode ? (
+          <Card borderWidth="1px" borderColor="sand.200">
+            <CardBody>
+              {studentMe.data ? (
+                <VStack align="stretch" spacing={4}>
+                  <FormControl>
+                    <FormLabel>Signed in as</FormLabel>
+                    <Text fontWeight="600">{studentMe.data.full_name}</Text>
+                    <Text fontSize="sm" color="gray.600">
+                      {studentMe.data.email}
+                    </Text>
+                  </FormControl>
+                  {joinState.error && (
+                    <FormErrorMessage display="block">
+                      {errorMessage(
+                        joinState.error,
+                        'Could not join. Check with your teacher.'
+                      )}
+                    </FormErrorMessage>
+                  )}
+                  <Button
+                    variant="accent"
+                    size="lg"
+                    w="full"
+                    isLoading={joinState.isLoading}
+                    loadingText="Joining…"
+                    onClick={() => void handleJoin({ preventDefault: () => undefined } as React.FormEvent)}
+                  >
+                    Start
+                  </Button>
+                </VStack>
+              ) : (
+                <VStack align="stretch" spacing={4}>
+                  <Text fontSize="sm" color="gray.600">
+                    Sign in with your school Google account. Your teacher matches you to the
+                    class roster by email.
+                  </Text>
+                  <Button
+                    as="a"
+                    href={googleLoginUrl('student', nextUrl)}
+                    variant="accent"
+                    size="lg"
+                    w="full"
+                  >
+                    Sign in with Google
+                  </Button>
+                </VStack>
+              )}
+            </CardBody>
+          </Card>
+        ) : (
         <Card as="form" onSubmit={handleJoin} borderWidth="1px" borderColor="sand.200">
           <CardBody>
             <FormControl
@@ -258,6 +344,7 @@ export function StudentActivityPage() {
             </Button>
           </CardBody>
         </Card>
+        )}
       </StudentShell>
     );
   }

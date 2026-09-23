@@ -34,6 +34,18 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.
 # Absolute origin students reach the app on. Used to build QR / join links.
 PUBLIC_BASE_URL = env_str("PUBLIC_BASE_URL", default="http://localhost:5173").rstrip("/")
 
+GOOGLE_OAUTH_CLIENT_ID = env_str("GOOGLE_OAUTH_CLIENT_ID", default="")
+GOOGLE_OAUTH_CLIENT_SECRET = env_str("GOOGLE_OAUTH_CLIENT_SECRET", default="")
+GOOGLE_OAUTH_REDIRECT_URI = env_str(
+    "GOOGLE_OAUTH_REDIRECT_URI",
+    default=f"{PUBLIC_BASE_URL}/api/auth/google/callback/",
+)
+OAUTH_ALLOWED_EMAIL_DOMAINS = [
+    part.strip().lower()
+    for part in env_str("OAUTH_ALLOWED_EMAIL_DOMAINS", default="").split(",")
+    if part.strip()
+]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

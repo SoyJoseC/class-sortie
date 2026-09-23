@@ -28,9 +28,12 @@ import {
   Th,
   Thead,
   Tr,
+  Switch,
+  useClipboard,
   useToast,
   VStack,
 } from '@chakra-ui/react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Link, useParams } from 'react-router-dom';
 import {
   useActivitiesQuery,
@@ -41,6 +44,7 @@ import {
   useRosterQuery,
   useSessionsQuery,
   useTopicTimelineQuery,
+  useUpdateClassroomMutation,
 } from '@/api/caricueApi';
 import { errorMessage, fieldErrors } from '@/api/baseQuery';
 import { EmptyState, ErrorState, LoadingState } from '@/components/StateViews';
@@ -61,6 +65,7 @@ export function ClassDetailPage() {
   const [addStudent, addState] = useAddStudentToClassMutation();
   const [importRoster, importState] = useImportRosterMutation();
   const [removeEnrollment] = useRemoveEnrollmentMutation();
+  const [updateClassroom] = useUpdateClassroomMutation();
 
   const [displayName, setDisplayName] = useState('');
   const [identifier, setIdentifier] = useState('');
@@ -72,6 +77,8 @@ export function ClassDetailPage() {
     touched && !displayName.trim()
       ? 'Enter the student’s display name.'
       : addFields.display_name;
+  const joinUrl = classroom.data?.class_join_url ?? '';
+  const { onCopy: onCopyJoinLink, hasCopied: joinLinkCopied } = useClipboard(joinUrl);
 
   if (classroom.isLoading) return <LoadingState label="Loading class…" />;
   if (classroom.isError || !classroom.data) {
@@ -126,6 +133,22 @@ export function ClassDetailPage() {
   const data = classroom.data;
   const enrollments = roster.data ?? [];
 
+  async function toggleSelfEnrollment(enabled: boolean) {
+    try {
+      await updateClassroom({
+        id: classroomId,
+        body: { self_enrollment_enabled: enabled },
+      }).unwrap();
+      toast({
+        title: enabled ? 'Self-enrollment enabled' : 'Self-enrollment disabled',
+        status: 'success',
+        duration: 2500,
+      });
+    } catch {
+      toast({ title: 'Could not update class settings', status: 'error' });
+    }
+  }
+
   return (
     <VStack spacing={6} align="stretch">
       <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
@@ -159,6 +182,41 @@ export function ClassDetailPage() {
           accent="ocean"
         />
       </SimpleGrid>
+
+      <Card borderWidth="1px" borderColor="sand.200">
+        <CardHeader pb={2}>
+          <Heading size="sm">Class join QR</Heading>
+          <Text fontSize="sm" color="gray.600">
+            Students scan this to join the roster with their school Google account.
+          </Text>
+        </CardHeader>
+        <CardBody pt={0}>
+          <Flex direction={{ base: 'column', md: 'row' }} gap={6} align="flex-start">
+            <Box bg="white" p={3} borderRadius="md" borderWidth="1px" borderColor="sand.200">
+              <QRCodeSVG value={joinUrl} size={160} aria-label="Class join QR code" />
+            </Box>
+            <VStack align="stretch" spacing={4} flex="1">
+              <FormControl display="flex" alignItems="center">
+                <FormLabel htmlFor="self-enrollment" mb={0} flex="1">
+                  Allow students to join this class with Google
+                </FormLabel>
+                <Switch
+                  id="self-enrollment"
+                  colorScheme="cariteal"
+                  isChecked={data.self_enrollment_enabled}
+                  onChange={(e) => void toggleSelfEnrollment(e.target.checked)}
+                />
+              </FormControl>
+              <HStack>
+                <Input value={joinUrl} isReadOnly size="sm" fontFamily="mono" />
+                <Button size="sm" variant="outline" onClick={onCopyJoinLink}>
+                  {joinLinkCopied ? 'Copied' : 'Copy link'}
+                </Button>
+              </HStack>
+            </VStack>
+          </Flex>
+        </CardBody>
+      </Card>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
         <Card borderWidth="1px" borderColor="sand.200">

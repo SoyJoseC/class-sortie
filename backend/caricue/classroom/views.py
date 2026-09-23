@@ -3,15 +3,25 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import (
+    action,
+    api_view,
+    authentication_classes,
+    permission_classes,
+    throttle_classes,
+)
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from caricue.accounts.student_account import get_student_account
 from caricue.core.permissions import OwnedQuerysetMixin
+from caricue.core.throttling import PublicJoinThrottle, PublicLookupThrottle
 from caricue.insights.comparison import build_topic_timeline
 
+from .class_join import ClassJoinError, join_class_via_invite
 from .csv_import import SAMPLE_CSV, RosterImportError, import_roster_csv
 from .models import Classroom, Enrollment, Student
 from .serializers import (
@@ -168,3 +178,70 @@ def roster_csv_template(request: Request) -> HttpResponse:
     response = HttpResponse(SAMPLE_CSV, content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="caricue-roster-template.csv"'
     return response
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([PublicLookupThrottle])
+def public_class_detail(request: Request, invite_token: str) -> Response:
+    """Public class summary for the class QR join page."""
+    classroom = get_object_or_404(
+        Classroom.objects.select_related("teacher"),
+        invite_token=invite_token,
+        is_active=True,
+    )
+    return Response(
+        {
+            "name": classroom.name,
+            "subject": classroom.subject,
+            "level": classroom.level,
+            "teacher_name": classroom.teacher.full_name,
+            "self_enrollment_enabled": classroom.self_enrollment_enabled,
+        }
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([PublicJoinThrottle])
+def public_class_join(request: Request, invite_token: str) -> Response:
+    """Enrol a signed-in student via the class invite token."""
+    account = get_student_account(request)
+    if account is None:
+        return Response(
+            {
+                "detail": "Sign in with your school Google account to join this class.",
+                "code": "google_sign_in_required",
+                "errors": {},
+            },
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    classroom = get_object_or_404(
+        Classroom.objects.select_related("teacher"),
+        invite_token=invite_token,
+        is_active=True,
+    )
+    try:
+        result = join_class_via_invite(classroom=classroom, account=account)
+    except ClassJoinError as exc:
+        http_status = (
+            status.HTTP_403_FORBIDDEN
+            if exc.code == "enrollment_disabled"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        return Response(
+            {"detail": exc.message, "code": exc.code, "errors": {}},
+            status=http_status,
+        )
+
+    return Response(
+        {
+            "classroom_name": result.classroom_name,
+            "student_id": result.student_id,
+            "already_enrolled": result.already_enrolled,
+        },
+        status=status.HTTP_200_OK if result.already_enrolled else status.HTTP_201_CREATED,
+    )

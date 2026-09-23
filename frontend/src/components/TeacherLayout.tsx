@@ -15,7 +15,7 @@ import {
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Brand } from './Brand';
 import { useCurrentTeacherQuery, useLogoutMutation } from '@/api/caricueApi';
-import { TAGLINE } from '@/theme';
+import { APP_NAME, APP_TAGLINE } from '@/branding';
 
 const NAV_ITEMS = [
   { to: '/app', label: 'Dashboard', end: true },
@@ -50,7 +50,7 @@ export function TeacherLayout() {
       <Box as="header" bg="white" borderBottomWidth="1px" borderColor="sand.200">
         <Container maxW="7xl" py={3}>
           <Flex align="center" justify="space-between" gap={4} wrap="wrap">
-            <Link to="/app" aria-label="CariCue dashboard">
+            <Link to="/app" aria-label={`${APP_NAME} dashboard`}>
               <Brand showTagline />
             </Link>
 
@@ -113,7 +113,7 @@ export function TeacherLayout() {
       <Box as="footer" borderTopWidth="1px" borderColor="sand.200" py={4}>
         <Container maxW="7xl">
           <Text fontSize="xs" color="gray.600">
-            CariCue · {TAGLINE} · Formative assessment, not a gradebook.
+            {APP_NAME} · {APP_TAGLINE} · Formative assessment, not a gradebook.
           </Text>
         </Container>
       </Box>

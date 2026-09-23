@@ -1,5 +1,5 @@
 import { Box, HStack, Text, VStack } from '@chakra-ui/react';
-import { TAGLINE } from '@/theme';
+import { APP_NAME, APP_TAGLINE } from '@/branding';
 
 interface BrandProps {
   showTagline?: boolean;
@@ -8,7 +8,7 @@ interface BrandProps {
   variant?: 'default' | 'light';
 }
 
-/** The CariCue wordmark: a simple wave glyph plus the name. */
+/** The ClassSortie wordmark: a simple wave glyph plus the name. */
 export function Brand({ showTagline = false, size = 'md', variant = 'default' }: BrandProps) {
   const nameSize = size === 'lg' ? '2xl' : size === 'sm' ? 'md' : 'xl';
   const glyph = size === 'lg' ? 12 : size === 'sm' ? 7 : 9;
@@ -42,7 +42,7 @@ export function Brand({ showTagline = false, size = 'md', variant = 'default' }:
           lineHeight="1.1"
           letterSpacing="-0.02em"
         >
-          CariCue
+          {APP_NAME}
         </Text>
         {showTagline && (
           <Text
@@ -50,7 +50,7 @@ export function Brand({ showTagline = false, size = 'md', variant = 'default' }:
             color={isLight ? 'cariteal.200' : 'cariteal.700'}
             fontWeight="600"
           >
-            {TAGLINE}
+            {APP_TAGLINE}
           </Text>
         )}
       </VStack>

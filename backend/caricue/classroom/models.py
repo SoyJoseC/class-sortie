@@ -8,11 +8,17 @@ import and roster-based session identity.
 
 from __future__ import annotations
 
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.db.models.functions import Lower
 
 from caricue.core.models import TimeStampedModel
+
+
+def generate_invite_token() -> str:
+    return secrets.token_hex(16)
 
 
 class Classroom(TimeStampedModel):
@@ -34,6 +40,16 @@ class Classroom(TimeStampedModel):
         help_text='Term or semester label, e.g. "2026 Term 1".',
     )
     is_active = models.BooleanField(default=True)
+    invite_token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        default=generate_invite_token,
+    )
+    self_enrollment_enabled = models.BooleanField(
+        default=False,
+        help_text="When enabled, students may join via the class QR with Google sign-in.",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -47,6 +63,11 @@ class Classroom(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def class_join_url(self) -> str:
+        base = settings.PUBLIC_BASE_URL.rstrip("/")
+        return f"{base}/join/class/{self.invite_token}"
 
     @property
     def roster_size(self) -> int:

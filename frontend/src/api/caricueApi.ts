@@ -2,10 +2,14 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './baseQuery';
 import type {
   Activity,
+  ActivityImportResult,
   ActivityListItem,
   ActivityWritePayload,
+  ClassJoinResult,
   ClientConfig,
   Classroom,
+  PublicClassInfo,
+  StudentAccount,
   DashboardResponse,
   Enrollment,
   HealthResponse,
@@ -89,6 +93,12 @@ export const caricueApi = createApi({
         invalidatesTags: ['Teacher'],
       }
     ),
+    studentMe: build.query<StudentAccount, void>({
+      query: () => 'auth/student/me/',
+    }),
+    studentLogout: build.mutation<void, void>({
+      query: () => ({ url: 'auth/student/logout/', method: 'POST' }),
+    }),
 
     // -- dashboard ------------------------------------------------------- //
     overview: build.query<TeacherOverview, void>({
@@ -199,6 +209,20 @@ export const caricueApi = createApi({
       query: (id) => ({ url: `activities/${id}/`, method: 'DELETE' }),
       invalidatesTags: ['Activity', 'Overview'],
     }),
+    importActivity: build.mutation<ActivityImportResult, { classroom: number; file: File }>({
+      query: ({ classroom, file }) => {
+        const form = new FormData();
+        form.append('classroom', String(classroom));
+        form.append('file', file);
+        return {
+          url: 'activities/import/',
+          method: 'POST',
+          body: form,
+          formData: true,
+        };
+      },
+      invalidatesTags: ['Activity', 'Overview'],
+    }),
 
     // -- sessions -------------------------------------------------------- //
     launchSession: build.mutation<
@@ -303,11 +327,21 @@ export const caricueApi = createApi({
     publicSession: build.query<PublicSession, string>({
       query: (token) => `public/sessions/${token}/`,
     }),
-    joinSession: build.mutation<PublicJoinResult, { token: string; identifier: string }>({
+    joinSession: build.mutation<PublicJoinResult, { token: string; identifier?: string }>({
       query: ({ token, identifier }) => ({
         url: `public/sessions/${token}/join/`,
         method: 'POST',
-        body: { identifier },
+        body: identifier ? { identifier } : {},
+      }),
+    }),
+    publicClass: build.query<PublicClassInfo, string>({
+      query: (inviteToken) => `public/classes/${inviteToken}/`,
+    }),
+    joinClass: build.mutation<ClassJoinResult, string>({
+      query: (inviteToken) => ({
+        url: `public/classes/${inviteToken}/join/`,
+        method: 'POST',
+        body: {},
       }),
     }),
     submitAnswers: build.mutation<
@@ -332,6 +366,8 @@ export const {
   useLoginMutation,
   useLogoutMutation,
   useUpdateProfileMutation,
+  useStudentMeQuery,
+  useStudentLogoutMutation,
   useOverviewQuery,
   useClassroomsQuery,
   useClassroomQuery,
@@ -348,6 +384,7 @@ export const {
   useCreateActivityMutation,
   useUpdateActivityMutation,
   useDeleteActivityMutation,
+  useImportActivityMutation,
   useLaunchSessionMutation,
   useSessionsQuery,
   useSessionQuery,
@@ -360,5 +397,7 @@ export const {
   useLazyLookupCodeQuery,
   usePublicSessionQuery,
   useJoinSessionMutation,
+  usePublicClassQuery,
+  useJoinClassMutation,
   useSubmitAnswersMutation,
 } = caricueApi;

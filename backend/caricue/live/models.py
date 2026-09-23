@@ -46,6 +46,7 @@ class SessionStatus(models.TextChoices):
 class IdentityMode(models.TextChoices):
     DISPLAY_NAME = "display_name", "Student types a display name"
     ROSTER_IDENTIFIER = "roster_identifier", "Student enters their roster identifier"
+    GOOGLE_ACCOUNT = "google_account", "Student signs in with school Google account"
 
 
 class PlanImpact(models.TextChoices):

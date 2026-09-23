@@ -95,6 +95,22 @@ def launch_session(
                 "identifiers or launch with display-name join."
             )
 
+    if mode == IdentityMode.GOOGLE_ACCOUNT:
+        has_emails = (
+            Student.objects.filter(
+                enrollments__classroom=activity.classroom,
+                enrollments__is_active=True,
+                is_active=True,
+            )
+            .exclude(email="")
+            .exists()
+        )
+        if not has_emails:
+            return None, (
+                "No students in this class have an email on file. Add emails "
+                "or launch with display-name join."
+            )
+
     if activity.status != ActivityStatus.PUBLISHED:
         activity.status = ActivityStatus.PUBLISHED
         activity.save(update_fields=["status", "updated_at"])
@@ -144,6 +160,38 @@ def join_session(*, session: LiveSession, identifier: str) -> JoinResult:
         raise SubmissionError("Please enter your name to join.", "identifier_required")
     if len(cleaned) > 80:
         raise SubmissionError("That name is too long (80 characters max).")
+
+    if session.identity_mode == IdentityMode.GOOGLE_ACCOUNT:
+        email = cleaned.strip().lower()
+        if "@" not in email:
+            raise SubmissionError(
+                "Sign in with your school Google account to join.",
+                "google_sign_in_required",
+            )
+        student = Student.objects.filter(
+            teacher=session.activity.teacher,
+            email__iexact=email,
+            is_active=True,
+            enrollments__classroom=session.classroom,
+            enrollments__is_active=True,
+        ).first()
+        if student is None:
+            raise SubmissionError(
+                "That email is not on this class list. Check with your teacher.",
+                "email_not_recognised",
+            )
+        display = student.display_name or email
+        existing = Participant.objects.filter(
+            live_session=session, student=student
+        ).first()
+        if existing is not None:
+            if existing.has_submitted:
+                raise AlreadySubmittedError
+            return JoinResult(participant=existing, resumed=True)
+        participant = Participant.objects.create(
+            live_session=session, student=student, display_name=display
+        )
+        return JoinResult(participant=participant, resumed=False)
 
     if session.identity_mode == IdentityMode.ROSTER_IDENTIFIER:
         student = Student.objects.filter(

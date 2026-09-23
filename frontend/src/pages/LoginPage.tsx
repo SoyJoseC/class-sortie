@@ -15,17 +15,20 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Brand } from '@/components/Brand';
 import { ErrorState } from '@/components/StateViews';
 import { useLoginMutation } from '@/api/caricueApi';
 import { errorMessage, fieldErrors } from '@/api/baseQuery';
-import { TAGLINE } from '@/theme';
+import { APP_NAME, APP_TAGLINE } from '@/branding';
+import { googleLoginUrl, oauthErrorMessage } from '@/utils/googleAuth';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [login, { isLoading, error }] = useLoginMutation();
+  const oauthError = oauthErrorMessage(searchParams.get('oauth_error'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -56,7 +59,7 @@ export function LoginPage() {
           <VStack spacing={2}>
             <Brand size="lg" />
             <Text color="cariteal.700" fontWeight="600">
-              {TAGLINE}
+              {APP_TAGLINE}
             </Text>
           </VStack>
 
@@ -64,6 +67,10 @@ export function LoginPage() {
             <CardBody>
               <VStack as="form" spacing={4} align="stretch" onSubmit={handleSubmit} noValidate>
                 <Heading size="md">Sign in</Heading>
+
+                {oauthError && (
+                  <ErrorState title="Could not sign in with Google" message={oauthError} />
+                )}
 
                 {error && !Object.keys(fields).length && (
                   <ErrorState title="Could not sign in" message={errorMessage(error)} />
@@ -100,10 +107,19 @@ export function LoginPage() {
                   Sign in
                 </Button>
 
+                <Button
+                  as="a"
+                  href={googleLoginUrl('teacher', from)}
+                  variant="outline"
+                  size="lg"
+                >
+                  Continue with Google
+                </Button>
+
                 <Divider />
                 <Stack spacing={2} fontSize="sm">
                   <Text>
-                    New to CariCue?{' '}
+                    New to {APP_NAME}?{' '}
                     <Link
                       to="/register"
                       style={{ textDecoration: 'underline', fontWeight: 600 }}

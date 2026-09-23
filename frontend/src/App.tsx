@@ -14,6 +14,7 @@ import { SessionLaunchPage } from '@/pages/SessionLaunchPage';
 import { SessionLivePage } from '@/pages/SessionLivePage';
 import { SessionReflectionPage } from '@/pages/SessionReflectionPage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { ClassJoinPage } from '@/pages/ClassJoinPage';
 import { StudentJoinPage } from '@/pages/StudentJoinPage';
 import { StudentActivityPage } from '@/pages/StudentActivityPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -56,6 +57,7 @@ export function App() {
       </Route>
 
       <Route path="/join" element={<StudentJoinPage />} />
+      <Route path="/join/class/:inviteToken" element={<ClassJoinPage />} />
       <Route path="/s/:token" element={<StudentActivityPage />} />
 
       <Route path="*" element={<NotFoundPage />} />

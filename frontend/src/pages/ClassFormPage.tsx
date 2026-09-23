@@ -165,7 +165,7 @@ function ClassForm({ classroom }: { classroom?: Classroom }) {
             )}
 
             <Text fontSize="sm" color="gray.600">
-              CariCue stores the minimum information needed to run a formative check. You add
+              ClassSortie stores the minimum information needed to run a formative check. You add
               students in the next step.
             </Text>
 

@@ -131,5 +131,5 @@ export const theme = extendTheme({
   },
 });
 
-/** Product tagline, used in the header and on the student screens. */
-export const TAGLINE = 'Teach. Check. Understand. Adapt.';
+/** @deprecated Import APP_TAGLINE from `@/branding` in UI code. */
+export { APP_TAGLINE as TAGLINE } from '@/branding';

@@ -15,6 +15,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router-dom';
+import { googleLoginUrl } from '@/utils/googleAuth';
 import { Brand } from '@/components/Brand';
 import { ErrorState } from '@/components/StateViews';
 import { useRegisterMutation } from '@/api/caricueApi';
@@ -150,6 +151,18 @@ export function RegisterPage() {
                 >
                   Create account
                 </Button>
+
+                <Button
+                  as="a"
+                  href={googleLoginUrl('teacher', '/app')}
+                  variant="outline"
+                  size="lg"
+                >
+                  Continue with Google
+                </Button>
+                <Text fontSize="xs" color="gray.600">
+                  Use your school Google account if your domain is allowed by this deployment.
+                </Text>
 
                 <Text fontSize="sm">
                   Already have an account?{' '}
