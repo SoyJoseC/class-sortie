@@ -433,6 +433,7 @@ def test_results_endpoint_includes_participant_detail(
 
     participant = response.data["participants"][0]
     assert participant["label"] == "Amara J"
+    assert participant["display_name"] == "Amara J"
     assert participant["has_submitted"] is True
     assert len(participant["responses"]) == 4
     assert participant["responses"][0]["question_position"] == 1

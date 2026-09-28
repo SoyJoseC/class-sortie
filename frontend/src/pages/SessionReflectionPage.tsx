@@ -170,13 +170,23 @@ function ReflectionForm({
 
   return (
     <VStack spacing={5} align="stretch">
-      <Box>
-        <Heading size="lg">What will you do next?</Heading>
-        <Text color="gray.600">
-          {session.activity_title} · {session.classroom_name} · closed{' '}
-          {formatDateTime(session.closed_at)}
-        </Text>
-      </Box>
+      <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
+        <Box>
+          <Heading size="lg">What will you do next?</Heading>
+          <Text color="gray.600">
+            {session.activity_title} · {session.classroom_name} · closed{' '}
+            {formatDateTime(session.closed_at)}
+          </Text>
+        </Box>
+        <Button
+          as={Link}
+          to={`/app/sessions/${sessionId}/submissions`}
+          variant="outline"
+          size="sm"
+        >
+          View submissions
+        </Button>
+      </Flex>
 
       {session.status === 'open' && (
         <Alert status="warning" borderRadius="md">

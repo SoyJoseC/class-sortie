@@ -15,6 +15,7 @@ import type {
   HealthResponse,
   IdentityMode,
   LiveSession,
+  Participant,
   Paginated,
   PlanImpact,
   PublicJoinResult,
@@ -276,6 +277,10 @@ export const caricueApi = createApi({
         { type: 'Reflection', id },
       ],
     }),
+    sessionParticipants: build.query<Participant[], number>({
+      query: (id) => `sessions/${id}/participants/`,
+      providesTags: (_r, _e, id) => [{ type: 'Dashboard', id }],
+    }),
     createFollowUpActivity: build.mutation<
       { activity_id: number },
       { sessionId: number; question_ids?: number[]; include_confidence?: boolean }
@@ -391,6 +396,7 @@ export const {
   useCloseSessionMutation,
   useSessionDashboardQuery,
   useSessionResultsQuery,
+  useSessionParticipantsQuery,
   useCreateFollowUpActivityMutation,
   useCreateReflectionMutation,
   useUpdateReflectionMutation,

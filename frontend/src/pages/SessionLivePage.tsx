@@ -125,6 +125,14 @@ export function SessionLivePage() {
           >
             Show code
           </Button>
+          <Button
+            as={Link}
+            to={`/app/sessions/${sessionId}/submissions`}
+            variant="outline"
+            size="sm"
+          >
+            Submissions
+          </Button>
           {isOpen ? (
             <Button
               variant="accent"

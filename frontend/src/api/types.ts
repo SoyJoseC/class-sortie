@@ -359,6 +359,8 @@ export interface ParticipantResponse {
 export interface Participant {
   id: number;
   label: string;
+  /** Name or identifier the student entered when joining (always stored). */
+  display_name: string;
   student: number | null;
   has_submitted: boolean;
   submitted_at: string | null;

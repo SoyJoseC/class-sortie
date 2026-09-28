@@ -131,6 +131,14 @@ export function SessionListPage() {
                         >
                           Results
                         </Button>
+                        <Button
+                          as={Link}
+                          to={`/app/sessions/${session.id}/submissions`}
+                          size="xs"
+                          variant="ghost"
+                        >
+                          Submissions
+                        </Button>
                         {session.status === 'open' && (
                           <Button
                             as={Link}

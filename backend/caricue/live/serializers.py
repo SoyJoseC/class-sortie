@@ -169,6 +169,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "label",
+            "display_name",
             "student",
             "has_submitted",
             "submitted_at",
