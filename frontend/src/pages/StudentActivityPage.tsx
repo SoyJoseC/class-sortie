@@ -19,6 +19,7 @@ import {
   RadioGroup,
   Stack,
   Text,
+  Textarea,
   VStack,
 } from '@chakra-ui/react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -452,7 +453,7 @@ export function StudentActivityPage() {
 
                   {question.question_type === 'short_text' && (
                     <FormControl isInvalid={isMissing}>
-                      <Input
+                      <Textarea
                         id={`answer-${question.id}`}
                         aria-labelledby={`prompt-${question.id}`}
                         value={answer.text_response ?? ''}
@@ -461,7 +462,9 @@ export function StudentActivityPage() {
                         }
                         placeholder="Type your answer"
                         size="lg"
+                        rows={4}
                         maxLength={1000}
+                        resize="vertical"
                       />
                       <FormErrorMessage>Please write an answer.</FormErrorMessage>
                     </FormControl>

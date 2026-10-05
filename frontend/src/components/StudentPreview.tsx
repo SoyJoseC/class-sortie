@@ -4,8 +4,8 @@ import {
   CardBody,
   Heading,
   HStack,
-  Input,
   Radio,
+  Textarea,
   RadioGroup,
   Stack,
   Text,
@@ -92,7 +92,13 @@ export function StudentPreview({
                 )}
 
                 {question.question_type === 'short_text' && (
-                  <Input size="sm" placeholder="Type your answer" isDisabled />
+                  <Textarea
+                    size="sm"
+                    placeholder="Type your answer"
+                    rows={3}
+                    isDisabled
+                    resize="none"
+                  />
                 )}
 
                 {(question.question_type === 'confidence' || question.collect_confidence) && (

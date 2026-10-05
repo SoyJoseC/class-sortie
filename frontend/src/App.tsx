@@ -12,6 +12,7 @@ import { ActivityBuilderPage } from '@/pages/ActivityBuilderPage';
 import { SessionListPage } from '@/pages/SessionListPage';
 import { SessionLaunchPage } from '@/pages/SessionLaunchPage';
 import { SessionLivePage } from '@/pages/SessionLivePage';
+import { SessionDiscussPage } from '@/pages/SessionDiscussPage';
 import { SessionReflectionPage } from '@/pages/SessionReflectionPage';
 import { SessionSubmissionsPage } from '@/pages/SessionSubmissionsPage';
 import { SessionSubmissionDetailPage } from '@/pages/SessionSubmissionDetailPage';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="activities/:id" element={<ActivityBuilderPage />} />
         <Route path="sessions" element={<SessionListPage />} />
         <Route path="sessions/:id" element={<SessionLivePage />} />
+        <Route path="sessions/:id/discuss" element={<SessionDiscussPage />} />
         <Route path="sessions/:id/launch" element={<SessionLaunchPage />} />
         <Route path="sessions/:id/reflection" element={<SessionReflectionPage />} />
         <Route path="sessions/:id/submissions" element={<SessionSubmissionsPage />} />
