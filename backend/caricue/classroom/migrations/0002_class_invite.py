@@ -1,6 +1,11 @@
-"""Class invite token and self-enrollment toggle."""
+"""Class invite token and self-enrollment toggle.
 
-import caricue.classroom.models
+The token is added as nullable and non-unique here, populated per row in 0003,
+and made unique in 0004. Adding a unique column with a callable default in one
+step gives every existing row the *same* value (Django evaluates the default
+once), which breaks the unique index on any database that already has classes.
+"""
+
 from django.db import migrations, models
 
 
@@ -24,11 +29,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="classroom",
             name="invite_token",
-            field=models.CharField(
-                db_index=True,
-                default=caricue.classroom.models.generate_invite_token,
-                max_length=64,
-                unique=True,
-            ),
+            field=models.CharField(max_length=64, null=True),
         ),
     ]
