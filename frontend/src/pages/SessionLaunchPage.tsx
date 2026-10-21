@@ -23,6 +23,7 @@ import { useCloseSessionMutation, useSessionQuery } from '@/api/caricueApi';
 import { errorMessage } from '@/api/baseQuery';
 import { ErrorState, LoadingState } from '@/components/StateViews';
 import { formatSessionCode } from '@/utils/insightFormat';
+import { useTourSegment } from '@/tour/useTour';
 
 /**
  * The screen a teacher projects.
@@ -32,6 +33,7 @@ import { formatSessionCode } from '@/utils/insightFormat';
  * reached, not for whatever host the teacher's browser happens to be on.
  */
 export function SessionLaunchPage() {
+  useTourSegment('reflection');
   const { id } = useParams<{ id: string }>();
   const sessionId = Number(id);
   const toast = useToast();
@@ -107,7 +109,7 @@ export function SessionLaunchPage() {
         </Alert>
       )}
 
-      <Card borderWidth="1px" borderColor="sand.200">
+      <Card borderWidth="1px" borderColor="sand.200" data-tour="session-code">
         <CardBody>
           <Flex
             direction={{ base: 'column', md: 'row' }}

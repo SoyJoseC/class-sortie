@@ -41,6 +41,7 @@ import {
   formatPercent,
   formatDateTime,
 } from '@/utils/insightFormat';
+import { useTourSegment } from '@/tour/useTour';
 
 const IMPACT_OPTIONS: { value: PlanImpact; label: string; help: string }[] = [
   {
@@ -94,19 +95,18 @@ function ReflectionForm({
   sessionId: number;
   results: SessionResults;
 }) {
+  useTourSegment('reflection');
   const navigate = useNavigate();
   const toast = useToast();
-  const { session, facts, suggestions, reflection, misconception_cards, comparison } =
-    results;
+  const { session, facts, suggestions, reflection, misconception_cards, comparison } = results;
+  const survey = facts.activity_kind === 'survey' || session.activity_kind === 'survey';
 
   const [create, createState] = useCreateReflectionMutation();
   const [update, updateState] = useUpdateReflectionMutation();
 
   const baselineGap = comparison?.baseline_snapshot?.primary_gap ?? '';
 
-  const [primaryGap, setPrimaryGap] = useState(
-    reflection?.primary_gap || baselineGap
-  );
+  const [primaryGap, setPrimaryGap] = useState(reflection?.primary_gap || baselineGap);
   const [planImpact, setPlanImpact] = useState<PlanImpact>(
     reflection?.plan_impact ?? 'confirmed'
   );
@@ -120,8 +120,9 @@ function ReflectionForm({
 
   // "Still unclear" is a legitimate outcome, so an action is only required
   // when the teacher says the evidence confirmed or changed the plan.
-  const actionRequired = planImpact !== 'unclear';
-  const gapError = primaryGap.trim().length < 3 ? 'Describe the gap in a few words.' : '';
+  const actionRequired = !survey && planImpact !== 'unclear';
+  const gapError =
+    !survey && primaryGap.trim().length < 3 ? 'Describe the gap in a few words.' : '';
   const actionError =
     actionRequired && plannedAction.trim().length < 3
       ? 'Say what you will do next lesson.'
@@ -172,7 +173,7 @@ function ReflectionForm({
     <VStack spacing={5} align="stretch">
       <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
         <Box>
-          <Heading size="lg">What will you do next?</Heading>
+          <Heading size="lg">{survey ? 'Anything to note?' : 'What will you do next?'}</Heading>
           <Text color="gray.600">
             {session.activity_title} · {session.classroom_name} · closed{' '}
             {formatDateTime(session.closed_at)}
@@ -220,23 +221,27 @@ function ReflectionForm({
           value={formatPercent(facts.completion_percentage)}
           accent="cariteal"
         />
-        <StatTile
-          label="Auto-scored correct"
-          value={formatPercent(facts.overall_correctness_percentage)}
-          accent="coral"
-        />
-        <StatTile
-          label="Average confidence"
-          value={formatConfidence(facts.average_confidence)}
-          accent="gray"
-        />
+        {!survey && (
+          <StatTile
+            label="Auto-scored correct"
+            value={formatPercent(facts.overall_correctness_percentage)}
+            accent="coral"
+          />
+        )}
+        {!survey && (
+          <StatTile
+            label="Average confidence"
+            value={formatConfidence(facts.average_confidence)}
+            accent="gray"
+          />
+        )}
       </SimpleGrid>
 
-      {comparison && (
+      {!survey && comparison && (
         <SessionComparisonPanel comparison={comparison} classroomId={session.classroom} />
       )}
 
-      {(misconception_cards?.length ?? 0) > 0 && (
+      {!survey && (misconception_cards?.length ?? 0) > 0 && (
         <MisconceptionCardPanel
           sessionId={sessionId}
           cards={misconception_cards ?? []}
@@ -247,7 +252,13 @@ function ReflectionForm({
 
       <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={5}>
         <Box gridColumn={{ lg: 'span 2' }}>
-          <Card borderWidth="1px" borderColor="sand.200" as="form" onSubmit={handleSubmit}>
+          <Card
+            borderWidth="1px"
+            borderColor="sand.200"
+            as="form"
+            onSubmit={handleSubmit}
+            data-tour="session-next-step"
+          >
             <CardBody>
               <VStack spacing={5} align="stretch">
                 {mutationError && (
@@ -349,43 +360,46 @@ function ReflectionForm({
         </Box>
 
         <VStack spacing={4} align="stretch">
-          <Card borderWidth="1px" borderColor="sand.200">
-            <CardBody>
-              <HStack justify="space-between" mb={2}>
-                <Heading size="sm" color="ocean.800">
-                  What the responses showed
-                </Heading>
-                <FactBadge />
-              </HStack>
-              {facts.lowest_correctness_questions.length === 0 ? (
-                <Text fontSize="sm" color="gray.600">
-                  No auto-scored questions to rank.
-                </Text>
-              ) : (
-                <VStack align="stretch" spacing={2}>
-                  {facts.lowest_correctness_questions.map((item) => (
-                    <Box key={item.question_id} bg="sand.100" px={3} py={2} borderRadius="md">
-                      <Text fontSize="sm" fontWeight="600">
-                        Q{item.position} · {formatPercent(item.correctness_percentage)} correct
-                      </Text>
-                      <Text fontSize="sm" color="gray.700">
-                        {item.prompt}
-                      </Text>
-                    </Box>
-                  ))}
-                </VStack>
-              )}
-              {facts.high_confidence_incorrect.length > 0 && (
-                <Text fontSize="sm" color="coral.700" mt={3}>
-                  {facts.high_confidence_incorrect.length} confident but incorrect answer
-                  {facts.high_confidence_incorrect.length === 1 ? '' : 's'} — often the clearest
-                  sign of a misconception.
-                </Text>
-              )}
-            </CardBody>
-          </Card>
+          {!survey && (
+            <Card borderWidth="1px" borderColor="sand.200">
+              <CardBody>
+                <HStack justify="space-between" mb={2}>
+                  <Heading size="sm" color="ocean.800">
+                    What the responses showed
+                  </Heading>
+                  <FactBadge />
+                </HStack>
+                {facts.lowest_correctness_questions.length === 0 ? (
+                  <Text fontSize="sm" color="gray.600">
+                    No auto-scored questions to rank.
+                  </Text>
+                ) : (
+                  <VStack align="stretch" spacing={2}>
+                    {facts.lowest_correctness_questions.map((item) => (
+                      <Box key={item.question_id} bg="sand.100" px={3} py={2} borderRadius="md">
+                        <Text fontSize="sm" fontWeight="600">
+                          Q{item.position} · {formatPercent(item.correctness_percentage)}{' '}
+                          correct
+                        </Text>
+                        <Text fontSize="sm" color="gray.700">
+                          {item.prompt}
+                        </Text>
+                      </Box>
+                    ))}
+                  </VStack>
+                )}
+                {facts.high_confidence_incorrect.length > 0 && (
+                  <Text fontSize="sm" color="coral.700" mt={3}>
+                    {facts.high_confidence_incorrect.length} confident but incorrect answer
+                    {facts.high_confidence_incorrect.length === 1 ? '' : 's'} — often the
+                    clearest sign of a misconception.
+                  </Text>
+                )}
+              </CardBody>
+            </Card>
+          )}
 
-          {suggestions.length > 0 && (
+          {!survey && suggestions.length > 0 && (
             <Card borderWidth="1px" borderColor="coral.200" bg="coral.50">
               <CardBody>
                 <Heading size="sm" color="ocean.800" mb={2}>

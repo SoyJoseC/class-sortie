@@ -136,6 +136,18 @@ def test_teacher_can_update_own_profile(auth_client, teacher):
     assert teacher.full_name == "Ms. A. Rowley"
 
 
+def test_teacher_can_store_onboarding_progress(auth_client, teacher):
+    response = auth_client.patch(
+        reverse("auth-me"),
+        {"onboarding": {"dismissed": True, "completed": ["class", "nope"]}},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["onboarding"] == {"dismissed": True, "completed": ["class"]}
+    teacher.refresh_from_db()
+    assert teacher.onboarding["completed"] == ["class"]
+
+
 def test_email_cannot_be_changed_through_the_profile_endpoint(auth_client, teacher):
     original = teacher.email
     response = auth_client.patch(

@@ -76,7 +76,10 @@ def test_title_is_required(auth_client, classroom):
     assert "title" in response.data["errors"]
 
 
-def test_more_than_five_questions_is_rejected(auth_client, classroom):
+def test_questions_beyond_the_configured_cap_are_rejected(
+    auth_client, classroom, settings
+):
+    settings.CARICUE = {**settings.CARICUE, "MAX_QUESTIONS_PER_ACTIVITY": 5}
     response = auth_client.post(
         reverse("activity-list"),
         {
@@ -88,6 +91,146 @@ def test_more_than_five_questions_is_rejected(auth_client, classroom):
     )
     assert response.status_code == 400
     assert "questions" in response.data["errors"]
+
+
+def test_an_activity_can_hold_far_more_than_five_questions(auth_client, classroom):
+    response = auth_client.post(
+        reverse("activity-list"),
+        {
+            "classroom": classroom.pk,
+            "title": "Long form",
+            "questions": [mcq(f"Question {n}") for n in range(30)],
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+    assert len(response.data["questions"]) == 30
+    assert [q["position"] for q in response.data["questions"]] == list(range(1, 31))
+
+
+def _put_body(current: dict, questions: list[dict]) -> dict:
+    return {
+        "classroom": current["classroom"],
+        "title": current["title"],
+        "topic": current["topic"],
+        "questions": questions,
+    }
+
+
+def test_editing_an_activity_keeps_questions_choices_and_responses(
+    auth_client, activity, open_session, enrolled_students, answers_for
+):
+    from caricue.live.models import Participant, Response
+    from caricue.live.services import submit_responses
+
+    participant = Participant.objects.create(
+        live_session=open_session, display_name="Amara"
+    )
+    submit_responses(
+        session=open_session,
+        participant=participant,
+        answers=answers_for(activity),
+    )
+    responses_before = Response.objects.count()
+    assert responses_before > 0
+    question_ids = list(activity.questions.values_list("pk", flat=True))
+    choice_ids = list(
+        activity.questions.get(position=1).choices.values_list("pk", flat=True)
+    )
+
+    detail = reverse("activity-detail", args=[activity.pk])
+    current = auth_client.get(detail).data
+    current["questions"][0]["prompt"] = "Reworded prompt"
+    current["questions"][0]["choices"][0]["text"] = "SSD"
+    response = auth_client.put(
+        detail, _put_body(current, current["questions"]), format="json"
+    )
+
+    assert response.status_code == 200
+    assert list(activity.questions.values_list("pk", flat=True)) == question_ids
+    assert Response.objects.count() == responses_before
+    first = activity.questions.get(position=1)
+    assert first.prompt == "Reworded prompt"
+    assert list(first.choices.values_list("pk", flat=True)) == choice_ids
+    assert first.choices.get(pk=choice_ids[0]).text == "SSD"
+    # Existing answers still point at the (renamed) choice.
+    assert Response.objects.filter(selected_choice_id=choice_ids[0]).exists()
+
+
+def test_reordering_questions_keeps_identity_and_responses(
+    auth_client, activity, open_session, answers_for
+):
+    from caricue.live.models import Participant, Response
+    from caricue.live.services import submit_responses
+
+    participant = Participant.objects.create(
+        live_session=open_session, display_name="Kai"
+    )
+    submit_responses(
+        session=open_session, participant=participant, answers=answers_for(activity)
+    )
+    total = Response.objects.count()
+    by_prompt = {q.prompt: q.pk for q in activity.questions.all()}
+
+    detail = reverse("activity-detail", args=[activity.pk])
+    current = auth_client.get(detail).data
+    reordered = list(reversed(current["questions"]))
+    response = auth_client.put(detail, _put_body(current, reordered), format="json")
+
+    assert response.status_code == 200
+    assert Response.objects.count() == total
+    for question in response.data["questions"]:
+        assert by_prompt[question["prompt"]] == question["id"]
+    assert [q["position"] for q in response.data["questions"]] == [1, 2, 3, 4]
+
+
+def test_removing_a_question_deletes_only_that_question(auth_client, activity):
+    detail = reverse("activity-detail", args=[activity.pk])
+    current = auth_client.get(detail).data
+    kept = current["questions"][:-1]
+    removed_id = current["questions"][-1]["id"]
+
+    response = auth_client.put(detail, _put_body(current, kept), format="json")
+
+    assert response.status_code == 200
+    ids = [q["id"] for q in response.data["questions"]]
+    assert removed_id not in ids
+    assert ids == [q["id"] for q in kept]
+
+
+def test_a_foreign_question_id_in_the_payload_is_treated_as_new(
+    auth_client, activity, make_activity, other_teacher, make_classroom
+):
+    other_activity = make_activity(other_teacher, make_classroom(other_teacher))
+    foreign = other_activity.questions.first()
+    detail = reverse("activity-detail", args=[activity.pk])
+    current = auth_client.get(detail).data
+    payload = [{**mcq("Smuggled"), "id": foreign.pk}]
+
+    response = auth_client.put(detail, _put_body(current, payload), format="json")
+
+    assert response.status_code == 200
+    foreign.refresh_from_db()
+    assert foreign.prompt != "Smuggled"
+    assert foreign.activity_id == other_activity.pk
+    assert response.data["questions"][0]["id"] != foreign.pk
+
+
+def test_question_payload_reports_how_many_responses_it_holds(
+    auth_client, activity, open_session, answers_for
+):
+    from caricue.live.models import Participant
+    from caricue.live.services import submit_responses
+
+    participant = Participant.objects.create(
+        live_session=open_session, display_name="Lee"
+    )
+    submit_responses(
+        session=open_session, participant=participant, answers=answers_for(activity)
+    )
+    detail = reverse("activity-detail", args=[activity.pk])
+    questions = auth_client.get(detail).data["questions"]
+    assert all(q["response_count"] == 1 for q in questions)
 
 
 def test_multiple_choice_needs_at_least_two_choices(auth_client, classroom):
@@ -255,8 +398,9 @@ def test_list_view_reports_question_counts(auth_client, activity):
 
 
 def test_standalone_question_create_requires_an_owned_activity(
-    auth_client, other_client, activity
+    auth_client, other_client, activity, settings
 ):
+    settings.CARICUE = {**settings.CARICUE, "MAX_QUESTIONS_PER_ACTIVITY": 5}
     payload = {
         "activity": activity.pk,
         "prompt": "Added later",

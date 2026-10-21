@@ -32,6 +32,40 @@ def _clear_throttle_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _restore_throttle_rates():
+    """Tests that tighten a throttle patch class attributes; undo that afterwards.
+
+    Without this a "2/min" join limit set by one test would throttle every
+    later test that joins more than twice.
+    """
+    from caricue.core import throttling
+
+    classes = [
+        cls
+        for cls in vars(throttling).values()
+        if isinstance(cls, type) and hasattr(cls, "THROTTLE_RATES")
+    ]
+    saved = [
+        (cls, cls.__dict__.get("THROTTLE_RATES"), cls.__dict__.get("rate"))
+        for cls in classes
+    ]
+    yield
+    for cls, rates, rate in saved:
+        for name, value in (("THROTTLE_RATES", rates), ("rate", rate)):
+            if value is None:
+                if name in cls.__dict__:
+                    delattr(cls, name)
+            else:
+                setattr(cls, name, value)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_media_root(settings, tmp_path):
+    """Uploaded images land in a per-test temp directory, never in the repo."""
+    settings.MEDIA_ROOT = tmp_path / "media"
+
+
 @pytest.fixture
 def api() -> APIClient:
     return APIClient()

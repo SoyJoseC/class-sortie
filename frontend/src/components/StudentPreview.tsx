@@ -2,8 +2,10 @@ import {
   Box,
   Card,
   CardBody,
+  Checkbox,
   Heading,
   HStack,
+  Image,
   Radio,
   Textarea,
   RadioGroup,
@@ -12,6 +14,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import type { Question } from '@/api/types';
+import { hasChoices } from '@/utils/activityDraft';
 
 /**
  * Renders the activity the way a student will see it on a phone.
@@ -72,23 +75,79 @@ export function StudentPreview({
                   )}
                 </Text>
 
-                {question.question_type === 'multiple_choice' && (
-                  <RadioGroup value="" onChange={() => undefined}>
+                {question.image_url && (
+                  <Image
+                    src={question.image_url}
+                    alt={question.image_alt || ''}
+                    maxH="160px"
+                    w="full"
+                    objectFit="contain"
+                    borderRadius="md"
+                    bg="white"
+                    loading="lazy"
+                  />
+                )}
+
+                {hasChoices(question.question_type) &&
+                  (question.question_type === 'multi_select' ? (
                     <Stack spacing={1}>
                       {question.choices
                         .filter((choice) => choice.text.trim())
                         .map((choice, choiceIndex) => (
-                          <Radio
-                            key={choiceIndex}
-                            value={String(choiceIndex)}
-                            isDisabled
-                            size="sm"
-                          >
+                          <Checkbox key={choiceIndex} isDisabled size="sm">
                             <Text fontSize="sm">{choice.text}</Text>
-                          </Radio>
+                          </Checkbox>
                         ))}
                     </Stack>
-                  </RadioGroup>
+                  ) : (
+                    <RadioGroup value="" onChange={() => undefined}>
+                      <Stack spacing={1}>
+                        {question.choices
+                          .filter((choice) => choice.text.trim())
+                          .map((choice, choiceIndex) => (
+                            <Radio
+                              key={choiceIndex}
+                              value={String(choiceIndex)}
+                              isDisabled
+                              size="sm"
+                            >
+                              <Text fontSize="sm">{choice.text}</Text>
+                            </Radio>
+                          ))}
+                      </Stack>
+                    </RadioGroup>
+                  ))}
+
+                {question.question_type === 'rating' && (
+                  <Box>
+                    <HStack justify="space-between" mb={1}>
+                      <Text fontSize="xs" color="gray.600">
+                        {question.rating_low_label || '1'}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600">
+                        {question.rating_high_label || '5'}
+                      </Text>
+                    </HStack>
+                    <HStack spacing={2}>
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <Box
+                          key={level}
+                          w="32px"
+                          h="32px"
+                          borderWidth="1px"
+                          borderColor="sand.300"
+                          borderRadius="md"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          fontSize="sm"
+                          color="ocean.700"
+                        >
+                          {level}
+                        </Box>
+                      ))}
+                    </HStack>
+                  </Box>
                 )}
 
                 {question.question_type === 'short_text' && (

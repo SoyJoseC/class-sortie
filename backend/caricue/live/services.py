@@ -16,6 +16,8 @@ from django.utils import timezone
 from caricue.activities.models import (
     CONFIDENCE_MAX,
     CONFIDENCE_MIN,
+    RATING_MAX,
+    RATING_MIN,
     Activity,
     ActivityStatus,
     Question,
@@ -79,6 +81,12 @@ def launch_session(
     if mode not in IdentityMode.values:
         return None, f"Unknown identity mode {mode!r}."
 
+    if mode == IdentityMode.ANONYMOUS and not activity.is_survey:
+        return None, (
+            "Anonymous join is only available for surveys. A quiz needs to know "
+            "who answered."
+        )
+
     if mode == IdentityMode.ROSTER_IDENTIFIER:
         has_identifiers = (
             Student.objects.filter(
@@ -131,6 +139,9 @@ def launch_session(
 def close_session(session: LiveSession) -> LiveSession:
     session.close()
     logger.info("Closed session %s", session.code)
+    from caricue.reviews.schedule import apply_session_to_schedule
+
+    apply_session_to_schedule(session)
     return session
 
 
@@ -154,6 +165,9 @@ def join_session(*, session: LiveSession, identifier: str) -> JoinResult:
     """
     if not session.is_open:
         raise SessionClosedError
+
+    if session.identity_mode == IdentityMode.ANONYMOUS:
+        return JoinResult(participant=_join_anonymously(session), resumed=False)
 
     cleaned = " ".join((identifier or "").split())
     if not cleaned:
@@ -240,6 +254,25 @@ def join_session(*, session: LiveSession, identifier: str) -> JoinResult:
     return JoinResult(participant=participant, resumed=False)
 
 
+def _join_anonymously(session: LiveSession) -> Participant:
+    """A survey respondent with no name: the server labels them "Respondent N".
+
+    The label exists only so the teacher can tell two submissions apart; it
+    carries no identity, and the participant token is the only credential.
+    """
+    existing = session.participants.count()
+    for offset in range(1, 11):
+        label = f"Respondent {existing + offset}"
+        try:
+            with transaction.atomic():
+                return Participant.objects.create(
+                    live_session=session, display_name=label
+                )
+        except IntegrityError:  # two respondents raced for the same number
+            continue
+    raise SubmissionError("Could not join right now. Please try again.", "join_failed")
+
+
 # --------------------------------------------------------------------------- #
 # Deterministic scoring
 # --------------------------------------------------------------------------- #
@@ -248,12 +281,17 @@ def score_answer(
 ) -> bool | None:
     """Correctness for one answer, or None when not deterministically scorable.
 
+    Surveys are never marked: every answer is `None`, whatever the question.
+
     Multiple choice compares against the choices the teacher marked correct.
     Short text compares normalised strings against the teacher's accepted
     answers, and returns None when no accepted answers were supplied (the
     teacher will read those responses themselves). Confidence items are never
     right or wrong.
     """
+    if question.activity.is_survey:
+        return None
+
     if question.question_type == QuestionType.MULTIPLE_CHOICE:
         if selected_choice_id is None:
             return False
@@ -314,6 +352,7 @@ def submit_responses(
             )
 
     rows: list[Response] = []
+    multi_choices: dict[int, list[int]] = {}
     for question in questions.values():
         answer = by_question.get(question.pk)
         if answer is None:
@@ -331,6 +370,9 @@ def submit_responses(
             text_response = ""
             selected_choice_id = None
 
+        if question.question_type == QuestionType.MULTI_SELECT:
+            multi_choices[question.pk] = answer["selected_choices"]
+
         rows.append(
             Response(
                 participant=locked,
@@ -338,6 +380,7 @@ def submit_responses(
                 selected_choice_id=selected_choice_id,
                 text_response=text_response[:1000],
                 confidence_value=confidence,
+                rating_value=answer.get("rating_value"),
                 is_correct=score_answer(
                     question=question,
                     selected_choice_id=selected_choice_id,
@@ -348,6 +391,7 @@ def submit_responses(
 
     try:
         Response.objects.bulk_create(rows)
+        _attach_multi_select_choices(locked, multi_choices)
     except IntegrityError as exc:
         raise AlreadySubmittedError from exc
 
@@ -360,6 +404,25 @@ def submit_responses(
         session.code,
     )
     return locked
+
+
+def _attach_multi_select_choices(
+    participant: Participant, multi_choices: dict[int, list[int]]
+) -> None:
+    """Links each multi-select response to every choice that was ticked."""
+    if not multi_choices:
+        return
+    through = Response.selected_choices.through
+    responses = Response.objects.filter(
+        participant=participant, question_id__in=multi_choices.keys()
+    )
+    through.objects.bulk_create(
+        [
+            through(response_id=response.pk, choice_id=choice_id)
+            for response in responses
+            for choice_id in multi_choices[response.question_id]
+        ]
+    )
 
 
 def _index_answers(
@@ -408,6 +471,39 @@ def _clean_answer(question: Question, raw: dict) -> dict:
             )
         cleaned["selected_choice"] = choice_id
 
+    ticked = raw.get("selected_choices")
+    if ticked not in (None, [], ()):
+        if question.question_type != QuestionType.MULTI_SELECT:
+            raise SubmissionError(
+                f"Question {question.position} does not take several choices."
+            )
+        if not isinstance(ticked, (list, tuple)):
+            raise SubmissionError("Selected choices must be a list.")
+        try:
+            ticked_ids = [int(value) for value in ticked]
+        except (TypeError, ValueError) as exc:
+            raise SubmissionError("Invalid choice.") from exc
+        valid_ids = set(question.choices.values_list("pk", flat=True))
+        if len(set(ticked_ids)) != len(ticked_ids) or not set(ticked_ids) <= valid_ids:
+            raise SubmissionError(
+                f"Invalid choice for question {question.position}.", "invalid_choice"
+            )
+        cleaned["selected_choices"] = ticked_ids
+
+    rating = raw.get("rating_value")
+    if rating not in (None, ""):
+        if question.question_type != QuestionType.RATING:
+            raise SubmissionError(f"Question {question.position} is not a rating.")
+        try:
+            rating = int(rating)
+        except (TypeError, ValueError) as exc:
+            raise SubmissionError("A rating must be a whole number.") from exc
+        if not RATING_MIN <= rating <= RATING_MAX:
+            raise SubmissionError(
+                f"A rating must be between {RATING_MIN} and {RATING_MAX}."
+            )
+        cleaned["rating_value"] = rating
+
     text = raw.get("text_response")
     if text not in (None, ""):
         if question.question_type != QuestionType.SHORT_TEXT:
@@ -454,4 +550,8 @@ def _is_answered(question: Question, answer: dict | None) -> bool:
         return bool((answer.get("text_response") or "").strip())
     if question.question_type == QuestionType.CONFIDENCE:
         return answer.get("confidence_value") is not None
+    if question.question_type == QuestionType.MULTI_SELECT:
+        return bool(answer.get("selected_choices"))
+    if question.question_type == QuestionType.RATING:
+        return answer.get("rating_value") is not None
     return False

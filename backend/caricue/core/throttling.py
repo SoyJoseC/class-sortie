@@ -6,7 +6,7 @@ the limits hold. Swapping in a shared cache backend is the documented
 extension point for multi-instance deployments.
 """
 
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 
 class PublicLookupThrottle(AnonRateThrottle):
@@ -21,6 +21,12 @@ class PublicJoinThrottle(AnonRateThrottle):
 
 class PublicSubmitThrottle(AnonRateThrottle):
     scope = "public_submit"
+
+
+class ImageUploadThrottle(UserRateThrottle):
+    """Caps how many images one teacher can upload per hour."""
+
+    scope = "image_upload"
 
 
 class AuthAttemptThrottle(AnonRateThrottle):

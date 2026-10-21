@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "caricue.activities",
     "caricue.live",
     "caricue.insights",
+    "caricue.reviews",
 ]
 
 MIDDLEWARE = [
@@ -148,6 +149,10 @@ USE_TZ = True
 # --------------------------------------------------------------------------- #
 STATIC_URL = "static/"
 STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", default=str(BASE_DIR / "staticfiles")))
+# Teacher-uploaded question images. In production Nginx serves MEDIA_URL
+# straight from this directory (a shared volume); in DEBUG Django does.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(env_str("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media")))
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
@@ -225,6 +230,8 @@ REST_FRAMEWORK = {
         "public_join": env_str("THROTTLE_PUBLIC_JOIN", default="20/min"),
         "public_submit": env_str("THROTTLE_PUBLIC_SUBMIT", default="20/min"),
         "auth_attempt": env_str("THROTTLE_AUTH_ATTEMPT", default="10/min"),
+        # Authenticated teachers uploading question images.
+        "image_upload": env_str("THROTTLE_IMAGE_UPLOAD", default="120/hour"),
     },
     "EXCEPTION_HANDLER": "caricue.core.exceptions.safe_exception_handler",
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
@@ -234,10 +241,14 @@ REST_FRAMEWORK = {
 # CariCue domain settings
 # --------------------------------------------------------------------------- #
 CARICUE = {
-    # Activity builder limits (product decision: keep formative checks short).
+    # Activity builder limits. The maximum is a safety cap rather than a
+    # product opinion: teachers may add as many questions as they see fit.
     "MIN_QUESTIONS_PER_ACTIVITY": env_int("CARICUE_MIN_QUESTIONS", 1),
-    "MAX_QUESTIONS_PER_ACTIVITY": env_int("CARICUE_MAX_QUESTIONS", 5),
+    "MAX_QUESTIONS_PER_ACTIVITY": env_int("CARICUE_MAX_QUESTIONS", 100),
     "MAX_CHOICES_PER_QUESTION": env_int("CARICUE_MAX_CHOICES", 6),
+    # Question images: upload size limit, and the longest edge after resizing.
+    "MAX_IMAGE_BYTES": env_int("CARICUE_MAX_IMAGE_BYTES", 5 * 1024 * 1024),
+    "MAX_IMAGE_EDGE_PX": env_int("CARICUE_MAX_IMAGE_EDGE_PX", 1600),
     "SHORT_CODE_LENGTH": env_int("CARICUE_SHORT_CODE_LENGTH", 6),
     # Insight thresholds.
     "HIGH_CONFIDENCE_THRESHOLD": env_int("CARICUE_HIGH_CONFIDENCE_THRESHOLD", 4),
@@ -249,6 +260,16 @@ CARICUE = {
     "DASHBOARD_POLL_SECONDS": env_int("CARICUE_DASHBOARD_POLL_SECONDS", 4),
     # Days after a changed-plan reflection before nudging a follow-up on dashboard.
     "FOLLOWUP_NUDGE_DAYS": env_int("CARICUE_FOLLOWUP_NUDGE_DAYS", 2),
+    # Leitner intervals (days) for boxes 0-5. A class that scores well waits
+    # longer before the topic comes back.
+    "REVIEW_INTERVALS_DAYS": [
+        max(1, int(value))
+        for value in env_list(
+            "CARICUE_REVIEW_INTERVALS_DAYS", default=["1", "3", "7", "14", "30", "60"]
+        )
+    ]
+    or [1, 3, 7, 14, 30, 60],
+    "REVIEW_ACTIVITY_MAX_QUESTIONS": env_int("CARICUE_REVIEW_ACTIVITY_MAX_QUESTIONS", 6),
 }
 
 # Optional AI suggestion layer. Defaults to the deterministic rule-based

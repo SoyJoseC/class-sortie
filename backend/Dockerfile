@@ -10,7 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DJANGO_SETTINGS_MODULE=caricue.settings \
-    DJANGO_STATIC_ROOT=/var/www/caricue/static
+    DJANGO_STATIC_ROOT=/var/www/caricue/static \
+    DJANGO_MEDIA_ROOT=/var/www/caricue/media
 
 WORKDIR /app
 
@@ -26,10 +27,10 @@ COPY . .
 
 # Static files are collected into a volume-friendly path that Nginx can also
 # read in the production compose file.
-RUN mkdir -p "$DJANGO_STATIC_ROOT" \
+RUN mkdir -p "$DJANGO_STATIC_ROOT" "$DJANGO_MEDIA_ROOT" \
     && addgroup --system --gid 1001 caricue \
     && adduser --system --uid 1001 --gid 1001 caricue \
-    && chown -R caricue:caricue /app "$DJANGO_STATIC_ROOT"
+    && chown -R caricue:caricue /app "$DJANGO_STATIC_ROOT" "$DJANGO_MEDIA_ROOT"
 
 COPY --chown=caricue:caricue entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

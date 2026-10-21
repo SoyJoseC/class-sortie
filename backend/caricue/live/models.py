@@ -27,6 +27,8 @@ from django.utils import timezone
 from caricue.activities.models import (
     CONFIDENCE_MAX,
     CONFIDENCE_MIN,
+    RATING_MAX,
+    RATING_MIN,
     Activity,
     Choice,
     Question,
@@ -47,6 +49,7 @@ class IdentityMode(models.TextChoices):
     DISPLAY_NAME = "display_name", "Student types a display name"
     ROSTER_IDENTIFIER = "roster_identifier", "Student enters their roster identifier"
     GOOGLE_ACCOUNT = "google_account", "Student signs in with school Google account"
+    ANONYMOUS = "anonymous", "Anonymous (no name asked; surveys only)"
 
 
 class PlanImpact(models.TextChoices):
@@ -227,6 +230,18 @@ class Response(TimeStampedModel):
         blank=True,
         related_name="responses",
     )
+    selected_choices = models.ManyToManyField(
+        Choice,
+        blank=True,
+        related_name="multi_responses",
+        help_text="Every choice ticked on a multi-select question.",
+    )
+    rating_value = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(RATING_MIN), MaxValueValidator(RATING_MAX)],
+        help_text="The 1-5 answer to a rating question (not a confidence level).",
+    )
     text_response = models.TextField(max_length=1000, blank=True)
     confidence_value = models.PositiveSmallIntegerField(
         null=True,
@@ -257,6 +272,11 @@ class Response(TimeStampedModel):
                     confidence_value__lte=CONFIDENCE_MAX,
                 ),
                 name="response_confidence_within_scale",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(rating_value__isnull=True)
+                | models.Q(rating_value__gte=RATING_MIN, rating_value__lte=RATING_MAX),
+                name="response_rating_within_scale",
             ),
         ]
         indexes = [models.Index(fields=["question", "is_correct"])]

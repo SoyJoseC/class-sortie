@@ -10,8 +10,36 @@ from .models import Teacher
 class TeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Teacher
-        fields = ["id", "email", "full_name", "school_name", "date_joined"]
+        fields = ["id", "email", "full_name", "school_name", "date_joined", "onboarding"]
         read_only_fields = ["id", "email", "date_joined"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        raw = data.get("onboarding") or {}
+        data["onboarding"] = {
+            "dismissed": bool(raw.get("dismissed", False)),
+            "completed": [
+                item
+                for item in raw.get("completed") or []
+                if item in {"class", "activity", "reflection"}
+            ],
+        }
+        return data
+
+    def validate_onboarding(self, value):
+        if value in (None, ""):
+            return {"dismissed": False, "completed": []}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Onboarding must be an object.")
+        dismissed = bool(value.get("dismissed", False))
+        allowed = {"class", "activity", "reflection"}
+        raw = value.get("completed") or []
+        if not isinstance(raw, list):
+            raise serializers.ValidationError(
+                "completed must be a list of segment names."
+            )
+        completed = [item for item in raw if item in allowed]
+        return {"dismissed": dismissed, "completed": completed}
 
 
 class RegisterSerializer(serializers.Serializer):

@@ -29,11 +29,7 @@ export function SessionComparisonPanel({
 
   const delta = comparison.overall_delta;
   const deltaLabel =
-    delta === null
-      ? '—'
-      : delta > 0
-        ? `+${delta.toFixed(1)}%`
-        : `${delta.toFixed(1)}%`;
+    delta === null ? '—' : delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`;
   const deltaColor = delta === null ? 'gray' : delta >= 0 ? 'cariteal' : 'coral';
 
   return (

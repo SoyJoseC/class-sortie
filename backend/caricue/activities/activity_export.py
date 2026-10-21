@@ -6,7 +6,7 @@ import csv
 import io
 import json
 
-from caricue.activities.models import Activity, QuestionType
+from caricue.activities.models import CHOICE_TYPES, Activity, QuestionType
 
 from .activity_import import CSV_COLUMNS, SAMPLE_CSV
 
@@ -17,11 +17,21 @@ def activity_template_csv() -> str:
 
 def export_activity_json(activity: Activity) -> str:
     questions = []
-    for question in activity.questions.prefetch_related("choices").order_by("position"):
+    for question in (
+        activity.questions.select_related("image")
+        .prefetch_related("choices")
+        .order_by("position")
+    ):
         entry = {
             "position": question.position,
             "prompt": question.prompt,
+            # Informational only: import ignores images, and the CSV format
+            # has no column for them.
+            "image_url": question.image_url,
+            "image_alt": question.image_alt,
             "question_type": question.question_type,
+            "rating_low_label": question.rating_low_label,
+            "rating_high_label": question.rating_high_label,
             "is_required": question.is_required,
             "collect_confidence": question.collect_confidence,
             "accepted_answers": question.accepted_answers or [],
@@ -39,6 +49,7 @@ def export_activity_json(activity: Activity) -> str:
         "format_version": 1,
         "title": activity.title,
         "topic": activity.topic,
+        "kind": activity.kind,
         "questions": questions,
     }
     return json.dumps(payload, indent=2)
@@ -53,6 +64,9 @@ def export_activity_csv(activity: Activity) -> str:
         base = {
             "activity_title": activity.title,
             "activity_topic": activity.topic,
+            "activity_kind": activity.kind,
+            "rating_low_label": question.rating_low_label,
+            "rating_high_label": question.rating_high_label,
             "question_position": question.position,
             "question_type": question.question_type,
             "prompt": question.prompt,
@@ -63,7 +77,7 @@ def export_activity_csv(activity: Activity) -> str:
             "choice_text": "",
             "is_correct": "",
         }
-        if question.question_type == QuestionType.MULTIPLE_CHOICE:
+        if question.question_type in CHOICE_TYPES:
             for choice in question.choices.order_by("position"):
                 row = base.copy()
                 row["choice_position"] = choice.position

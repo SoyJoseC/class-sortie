@@ -5,6 +5,7 @@ import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactElement, ReactNode } from 'react';
 import { caricueApi } from '@/api/caricueApi';
+import { tourSlice } from '@/tour/tourSlice';
 import { theme } from '@/theme';
 
 /**
@@ -17,7 +18,10 @@ export function renderWithProviders(
   { route = '/' }: { route?: string } = {}
 ) {
   const store = configureStore({
-    reducer: { [caricueApi.reducerPath]: caricueApi.reducer },
+    reducer: {
+      [caricueApi.reducerPath]: caricueApi.reducer,
+      tour: tourSlice.reducer,
+    },
     middleware: (getDefault) => getDefault().concat(caricueApi.middleware),
   });
 

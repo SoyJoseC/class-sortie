@@ -27,7 +27,13 @@ import {
   totalConfidenceResponses,
 } from '@/utils/insightFormat';
 
-export function QuestionInsightCard({ question }: { question: QuestionInsight }) {
+export function QuestionInsightCard({
+  question,
+  survey = false,
+}: {
+  question: QuestionInsight;
+  survey?: boolean;
+}) {
   const tone = correctnessTone(question.correctness_percentage);
   const colorScheme = toneColorScheme(tone);
   const confidenceTotal = totalConfidenceResponses(question.confidence_distribution);
@@ -43,7 +49,7 @@ export function QuestionInsightCard({ question }: { question: QuestionInsight })
                   Q{question.position}
                 </Badge>
                 <Text fontSize="xs" color="gray.600">
-                  {questionTypeLabel(question.question_type)}
+                  {questionTypeLabel(question.question_type, survey ? 'survey' : 'quiz')}
                 </Text>
               </HStack>
               <Text fontWeight="700" color="ocean.800">
@@ -54,13 +60,20 @@ export function QuestionInsightCard({ question }: { question: QuestionInsight })
               <Text fontSize="sm" color="gray.600">
                 {question.response_count} response{question.response_count === 1 ? '' : 's'}
               </Text>
-              <Text fontSize="sm" fontWeight="600" color={`${colorScheme}.700`}>
-                {describeCorrectness(question)}
-              </Text>
+              {!survey && (
+                <Text fontSize="sm" fontWeight="600" color={`${colorScheme}.700`}>
+                  {describeCorrectness(question)}
+                </Text>
+              )}
+              {survey && question.average_rating != null && (
+                <Text fontSize="sm" fontWeight="600" color="ocean.700">
+                  Average {question.average_rating.toFixed(1)} / 5
+                </Text>
+              )}
             </VStack>
           </Flex>
 
-          {question.is_auto_scored && question.correctness_percentage !== null && (
+          {!survey && question.is_auto_scored && question.correctness_percentage !== null && (
             <Progress
               value={question.correctness_percentage}
               colorScheme={colorScheme}
@@ -89,7 +102,7 @@ export function QuestionInsightCard({ question }: { question: QuestionInsight })
                       <Td>
                         <HStack spacing={2}>
                           <Text>{choice.text}</Text>
-                          {choice.is_correct && (
+                          {!survey && choice.is_correct && (
                             <Badge colorScheme="cariteal" variant="subtle" fontSize="0.6rem">
                               correct
                             </Badge>
@@ -105,7 +118,37 @@ export function QuestionInsightCard({ question }: { question: QuestionInsight })
             </Box>
           )}
 
-          {question.common_answers.length > 0 && (
+          {survey && (question.text_answers?.length ?? 0) > 0 && (
+            <Box>
+              <Text fontSize="sm" fontWeight="700" color="gray.700" mb={2}>
+                Written answers
+              </Text>
+              <VStack align="stretch" spacing={1}>
+                {question.text_answers?.map((answer, index) => (
+                  <Box key={`${index}-${answer}`} bg="sand.100" px={3} py={2} borderRadius="md">
+                    <Text>{answer}</Text>
+                  </Box>
+                ))}
+              </VStack>
+            </Box>
+          )}
+
+          {question.rating_distribution &&
+            Object.values(question.rating_distribution).some((n) => n > 0) && (
+              <Box>
+                <HStack justify="space-between" mb={2}>
+                  <Text fontSize="sm" fontWeight="700" color="gray.700">
+                    Ratings
+                  </Text>
+                </HStack>
+                <ConfidenceChart
+                  distribution={question.rating_distribution}
+                  label={`Ratings for question ${question.position}`}
+                />
+              </Box>
+            )}
+
+          {!survey && question.common_answers.length > 0 && (
             <Box>
               <Text fontSize="sm" fontWeight="700" color="gray.700" mb={2}>
                 Most common answers

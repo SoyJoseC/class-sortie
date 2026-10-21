@@ -1,9 +1,13 @@
 /** Shapes returned by the CariCue API. Mirrors the DRF serializers. */
 
-export type QuestionType = 'multiple_choice' | 'short_text' | 'confidence';
+export type QuestionType =
+  'multiple_choice' | 'multi_select' | 'rating' | 'short_text' | 'confidence';
+/** A quiz is marked; a survey is unmarked and collects opinions. */
+export type ActivityKind = 'quiz' | 'survey';
 export type ActivityStatus = 'draft' | 'published';
 export type SessionStatus = 'open' | 'closed';
-export type IdentityMode = 'display_name' | 'roster_identifier' | 'google_account';
+export type IdentityMode =
+  'display_name' | 'roster_identifier' | 'google_account' | 'anonymous';
 export type PlanImpact = 'confirmed' | 'changed' | 'unclear';
 
 /** Uniform error envelope produced by `core.exceptions.safe_exception_handler`. */
@@ -20,12 +24,20 @@ export interface Paginated<T> {
   results: T[];
 }
 
+export type TourSegment = 'class' | 'activity' | 'reflection';
+
+export interface TeacherOnboarding {
+  dismissed: boolean;
+  completed: TourSegment[];
+}
+
 export interface Teacher {
   id: number;
   email: string;
   full_name: string;
   school_name: string;
   date_joined: string;
+  onboarding?: TeacherOnboarding;
 }
 
 export interface ClientConfig {
@@ -34,7 +46,16 @@ export interface ClientConfig {
   min_questions: number;
   max_questions: number;
   max_choices: number;
+  max_image_bytes: number;
   ai_suggestions_enabled: boolean;
+}
+
+export interface QuestionImageUpload {
+  id: number;
+  /** Same-origin path such as `/media/question-images/<random>.jpg`. */
+  url: string;
+  width: number;
+  height: number;
 }
 
 export interface Classroom {
@@ -108,12 +129,21 @@ export interface Question {
   id?: number;
   position?: number;
   prompt: string;
+  /** Omitted = leave the picture alone; `null` = remove it. */
+  image_id?: number | null;
+  image_url?: string | null;
+  image_alt?: string;
   question_type: QuestionType;
+  /** Labels for the ends of a 1-5 rating scale (rating questions only). */
+  rating_low_label?: string;
+  rating_high_label?: string;
   is_required: boolean;
   collect_confidence: boolean;
   accepted_answers: string[];
   choices: Choice[];
   is_auto_scored?: boolean;
+  /** How many student answers this saved question already holds. */
+  response_count?: number;
 }
 
 export interface Activity {
@@ -123,6 +153,7 @@ export interface Activity {
   title: string;
   topic: string;
   status: ActivityStatus;
+  kind?: ActivityKind;
   questions: Question[];
   question_count: number;
   open_session_count: number;
@@ -138,6 +169,7 @@ export interface ActivityWritePayload {
   classroom: number;
   title: string;
   topic: string;
+  kind?: ActivityKind;
   status?: ActivityStatus;
   questions: Question[];
 }
@@ -154,6 +186,7 @@ export interface LiveSession {
   join_url: string;
   status: SessionStatus;
   identity_mode: IdentityMode;
+  activity_kind?: ActivityKind;
   roster_size: number;
   participant_count: number;
   submitted_count: number;
@@ -195,6 +228,11 @@ export interface QuestionInsight {
   common_answers: CommonAnswer[];
   confidence_distribution: ConfidenceDistribution;
   average_confidence: number | null;
+  /** Survey-only: respondents per rating level ("1".."5"). Empty for quizzes. */
+  rating_distribution?: Record<string, number>;
+  average_rating?: number | null;
+  /** Survey-only: every written answer, verbatim. */
+  text_answers?: string[];
 }
 
 export interface SignalItem {
@@ -248,6 +286,7 @@ export interface SessionFacts {
   needs_attention: AttentionItem[];
   has_confidence_data: boolean;
   has_auto_scored_data: boolean;
+  activity_kind?: ActivityKind;
 }
 
 /** Advisory output from an insight provider. Never authoritative. */
@@ -350,6 +389,9 @@ export interface ParticipantResponse {
   question_type: QuestionType;
   selected_choice: number | null;
   selected_choice_text: string | null;
+  /** Multi-select answers. */
+  selected_choice_texts?: string[];
+  rating_value?: number | null;
   text_response: string;
   confidence_value: number | null;
   is_correct: boolean | null;
@@ -393,6 +435,7 @@ export interface SessionResults {
 
 export interface RecentResult {
   session: LiveSession;
+  activity_kind?: ActivityKind;
   submitted_count: number;
   completion_percentage: number | null;
   overall_correctness_percentage: number | null;
@@ -400,6 +443,23 @@ export interface RecentResult {
   needs_attention_count: number;
   misconception_count: number;
   has_comparison: boolean;
+}
+
+export interface ReviewItem {
+  id: number;
+  classroom: number;
+  classroom_name: string;
+  topic_key: string;
+  topic_label: string;
+  box: number;
+  last_score: number | null;
+  last_session: number | null;
+  last_session_code: string | null;
+  due_at: string;
+  snoozed_until: string | null;
+  is_due: boolean;
+  interval_days: number;
+  updated_at: string;
 }
 
 export interface PendingFollowUp {
@@ -422,6 +482,7 @@ export interface TeacherOverview {
   open_sessions: LiveSession[];
   recent_results: RecentResult[];
   pending_followups: PendingFollowUp[];
+  due_reviews?: ReviewItem[];
   counts: {
     classrooms: number;
     activities: number;
@@ -453,7 +514,11 @@ export interface PublicQuestion {
   id: number;
   position: number;
   prompt: string;
+  image_url?: string | null;
+  image_alt?: string;
   question_type: QuestionType;
+  rating_low_label?: string;
+  rating_high_label?: string;
   is_required: boolean;
   collect_confidence: boolean;
   choices: PublicChoice[];
@@ -465,6 +530,7 @@ export interface PublicSession {
   status: SessionStatus;
   is_open: boolean;
   identity_mode: IdentityMode;
+  activity_kind?: ActivityKind;
   activity_title: string;
   activity_topic: string;
   class_name: string;
@@ -482,6 +548,9 @@ export interface PublicJoinResult {
 export interface PublicAnswer {
   question: number;
   selected_choice?: number | null;
+  /** Multi-select: every ticked choice. */
+  selected_choices?: number[];
+  rating_value?: number | null;
   text_response?: string;
   confidence_value?: number | null;
 }

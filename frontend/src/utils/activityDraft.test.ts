@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Question } from '@/api/types';
 import {
-  MAX_QUESTIONS,
+  DEFAULT_LIMITS,
   blankQuestion,
   changeQuestionType,
+  convertQuestionsForKind,
   formatAcceptedAnswers,
   isDraftValid,
   moveQuestion,
@@ -36,6 +37,14 @@ describe('blankQuestion', () => {
   it('gives non-choice types no choices', () => {
     expect(blankQuestion('short_text').choices).toHaveLength(0);
     expect(blankQuestion('confidence').choices).toHaveLength(0);
+    expect(blankQuestion('rating', 'survey').choices).toHaveLength(0);
+  });
+
+  it('starts a multi-select with two empty choices and no answer key', () => {
+    const question = blankQuestion('multi_select', 'survey');
+    expect(question.choices).toHaveLength(2);
+    expect(question.choices.every((choice) => !choice.is_correct)).toBe(true);
+    expect(question.collect_confidence).toBe(false);
   });
 });
 
@@ -63,6 +72,29 @@ describe('changeQuestionType', () => {
   it('returns the same object when the type has not changed', () => {
     const question = mcq();
     expect(changeQuestionType(question, 'multiple_choice')).toBe(question);
+  });
+
+  it('keeps typed choices when switching between single and multi-select', () => {
+    const switched = changeQuestionType(mcq(), 'multi_select');
+    expect(switched.choices.map((c) => c.text)).toEqual(['Router', 'Switch']);
+    expect(switched.choices.every((c) => !c.is_correct)).toBe(true);
+  });
+});
+
+describe('convertQuestionsForKind', () => {
+  it('turns a quiz confidence item into a rating when switching to a survey', () => {
+    const [converted] = convertQuestionsForKind(
+      [{ ...blankQuestion('confidence'), prompt: 'How sure?' }],
+      'survey'
+    );
+    expect(converted.question_type).toBe('rating');
+    expect(converted.collect_confidence).toBe(false);
+  });
+
+  it('strips the answer key so a survey cannot stay marked', () => {
+    const [converted] = convertQuestionsForKind([mcq()], 'survey');
+    expect(converted.choices.every((choice) => !choice.is_correct)).toBe(true);
+    expect(converted.accepted_answers).toEqual([]);
   });
 });
 
@@ -135,6 +167,27 @@ describe('validateQuestion', () => {
     expect(validateQuestion(question)).toBe('A choice marked correct has no text.');
   });
 
+  it('does not require an answer key on a survey choice question', () => {
+    const question = mcq({
+      choices: [
+        { text: 'Cabling', is_correct: false },
+        { text: 'Wi-Fi', is_correct: false },
+      ],
+    });
+    expect(validateQuestion(question, DEFAULT_LIMITS, 'survey')).toBeNull();
+  });
+
+  it('requires two choices on a multi-select', () => {
+    const question = {
+      ...blankQuestion('multi_select', 'survey'),
+      prompt: 'Which topics helped?',
+      choices: [{ text: 'Only', is_correct: false }],
+    };
+    expect(validateQuestion(question, DEFAULT_LIMITS, 'survey')).toBe(
+      'Multi-select questions need at least two choices.'
+    );
+  });
+
   it('does not require an answer key for short text or confidence', () => {
     expect(
       validateQuestion({ ...blankQuestion('short_text'), prompt: 'Explain why.' })
@@ -167,10 +220,17 @@ describe('validateDraft', () => {
     expect(errors.questions).toBe('Add at least 1 question.');
   });
 
-  it('caps the activity at five questions to keep it a quick check', () => {
-    const questions = Array.from({ length: MAX_QUESTIONS + 1 }, () => mcq());
+  it('caps the activity at the limit the server publishes', () => {
+    const limits = { ...DEFAULT_LIMITS, maxQuestions: 3 };
+    const questions = Array.from({ length: 4 }, () => mcq());
+    const errors = validateDraft({ title: 'Check', classroom: 1, questions }, limits);
+    expect(errors.questions).toBe('An activity can have at most 3 questions.');
+  });
+
+  it('accepts far more than five questions by default', () => {
+    const questions = Array.from({ length: 40 }, () => mcq());
     const errors = validateDraft({ title: 'Check', classroom: 1, questions });
-    expect(errors.questions).toBe(`An activity can have at most ${MAX_QUESTIONS} questions.`);
+    expect(errors.questions).toBeUndefined();
   });
 
   it('keys question problems by index so the right card is highlighted', () => {
@@ -241,8 +301,58 @@ describe('toWritePayload', () => {
     expect(payload[0].collect_confidence).toBe(false);
   });
 
+  it('keeps ids so the server can update saved questions and choices in place', () => {
+    const payload = toWritePayload({
+      title: 'Check',
+      classroom: 1,
+      questions: [
+        mcq({
+          id: 9,
+          choices: [
+            { id: 31, text: 'Router', is_correct: true },
+            { text: 'Switch', is_correct: false },
+          ],
+        }),
+      ],
+    });
+    expect(payload[0].id).toBe(9);
+    expect(payload[0].choices).toEqual([
+      { id: 31, text: 'Router', is_correct: true },
+      { text: 'Switch', is_correct: false },
+    ]);
+  });
+
   it('omits positions, which the server assigns', () => {
     const payload = toWritePayload({ title: 'Check', classroom: 1, questions: [mcq()] });
     expect(payload[0]).not.toHaveProperty('position');
+  });
+
+  it('clears the answer key when the draft is a survey', () => {
+    const payload = toWritePayload({
+      title: 'Feedback',
+      classroom: 1,
+      kind: 'survey',
+      questions: [mcq()],
+    });
+    expect(payload[0].choices.every((choice) => !choice.is_correct)).toBe(true);
+    expect(payload[0].collect_confidence).toBe(false);
+  });
+
+  it('sends rating labels only on rating questions', () => {
+    const payload = toWritePayload({
+      title: 'Feedback',
+      classroom: 1,
+      kind: 'survey',
+      questions: [
+        {
+          ...blankQuestion('rating', 'survey'),
+          prompt: 'Pace?',
+          rating_low_label: 'Too slow',
+          rating_high_label: 'Too fast',
+        },
+      ],
+    });
+    expect(payload[0].rating_low_label).toBe('Too slow');
+    expect(payload[0].rating_high_label).toBe('Too fast');
   });
 });

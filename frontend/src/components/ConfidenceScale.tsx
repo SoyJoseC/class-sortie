@@ -7,6 +7,8 @@ interface ConfidenceScaleProps {
   value: number | undefined;
   onChange: (value: number) => void;
   scale?: { min: number; max: number };
+  lowLabel?: string;
+  highLabel?: string;
 }
 
 /**
@@ -22,6 +24,8 @@ export function ConfidenceScale({
   value,
   onChange,
   scale = { min: 1, max: 5 },
+  lowLabel = 'Not sure',
+  highLabel = 'Very sure',
 }: ConfidenceScaleProps) {
   const levels: number[] = [];
   for (let level = scale.min; level <= scale.max; level += 1) levels.push(level);
@@ -61,7 +65,7 @@ export function ConfidenceScale({
                 opacity={0}
                 w="1px"
                 h="1px"
-                aria-label={confidenceLabel(level)}
+                aria-label={lowLabel === 'Not sure' ? confidenceLabel(level) : String(level)}
               />
               {level}
             </Box>
@@ -70,10 +74,10 @@ export function ConfidenceScale({
       </HStack>
       <HStack justify="space-between" mt={1}>
         <Text fontSize="xs" color="gray.600">
-          Not sure
+          {lowLabel}
         </Text>
         <Text fontSize="xs" color="gray.600">
-          Very sure
+          {highLabel}
         </Text>
       </HStack>
     </Box>

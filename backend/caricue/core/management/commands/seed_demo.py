@@ -296,6 +296,9 @@ class Command(BaseCommand):
         session.started_at = timezone.now() - timedelta(days=5)
         session.closed_at = timezone.now() - timedelta(days=4)
         session.save(update_fields=["started_at", "closed_at"])
+        from caricue.reviews.schedule import apply_session_to_schedule
+
+        apply_session_to_schedule(session)
 
         TeacherReflection.objects.get_or_create(
             live_session=session,
@@ -359,6 +362,13 @@ class Command(BaseCommand):
         session.started_at = timezone.now() - timedelta(days=2)
         session.closed_at = timezone.now() - timedelta(days=1)
         session.save(update_fields=["started_at", "closed_at"])
+        from caricue.reviews.schedule import apply_session_to_schedule
+
+        item = apply_session_to_schedule(session)
+        if item is not None:
+            item.due_at = timezone.now() - timedelta(hours=1)
+            item.snoozed_until = None
+            item.save(update_fields=["due_at", "snoozed_until", "updated_at"])
 
         self.stdout.write(
             f"Follow-up session {session.code} with improved scores "

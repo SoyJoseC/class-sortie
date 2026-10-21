@@ -13,6 +13,8 @@ import {
   FormLabel,
   Heading,
   HStack,
+  Checkbox,
+  Image,
   Input,
   Progress,
   Radio,
@@ -40,6 +42,8 @@ type Phase = 'identify' | 'answer' | 'done';
 
 interface DraftAnswer {
   selected_choice?: number;
+  selected_choices?: number[];
+  rating_value?: number;
   text_response?: string;
   confidence_value?: number;
 }
@@ -69,24 +73,26 @@ export function StudentActivityPage() {
   const [submit, submitState] = useSubmitAnswersMutation();
 
   const googleMode = session.data?.identity_mode === 'google_account';
+  const anonymous = session.data?.identity_mode === 'anonymous';
   const studentMe = useStudentMeQuery(undefined, { skip: !googleMode });
 
   useEffect(() => {
-    if (!googleMode || phase !== 'identify' || !studentMe.data || joinState.isLoading) {
+    const autoJoin = (googleMode && studentMe.data) || anonymous;
+    if (!autoJoin || phase !== 'identify' || joinState.isLoading) {
       return;
     }
     void join({ token })
       .unwrap()
       .then((result) => {
         setParticipantToken(result.participant_token);
-        setLabel(result.display_label);
+        setLabel(anonymous ? '' : result.display_label);
         setShowErrors(false);
         setPhase('answer');
       })
       .catch(() => {
         // Rendered inline.
       });
-  }, [googleMode, phase, studentMe.data, joinState.isLoading, join, token]);
+  }, [googleMode, anonymous, phase, studentMe.data, joinState.isLoading, join, token]);
 
   if (session.isLoading) return <LoadingState label="Loading activity…" />;
   if (session.isError || !session.data) {
@@ -144,13 +150,13 @@ export function StudentActivityPage() {
   async function handleJoin(event: React.FormEvent) {
     event.preventDefault();
     setShowErrors(true);
-    if (!googleMode && !identifier.trim()) return;
+    if (!googleMode && !anonymous && !identifier.trim()) return;
     try {
       const result = await join(
-        googleMode ? { token } : { token, identifier: identifier.trim() }
+        googleMode || anonymous ? { token } : { token, identifier: identifier.trim() }
       ).unwrap();
       setParticipantToken(result.participant_token);
-      setLabel(result.display_label);
+      setLabel(anonymous ? '' : result.display_label);
       setShowErrors(false);
       setPhase('answer');
     } catch {
@@ -170,6 +176,9 @@ export function StudentActivityPage() {
     if (!answer) return false;
     if (question.question_type === 'multiple_choice')
       return answer.selected_choice !== undefined;
+    if (question.question_type === 'multi_select')
+      return Boolean(answer.selected_choices && answer.selected_choices.length > 0);
+    if (question.question_type === 'rating') return answer.rating_value !== undefined;
     if (question.question_type === 'short_text') return Boolean(answer.text_response?.trim());
     return answer.confidence_value !== undefined;
   }
@@ -200,6 +209,10 @@ export function StudentActivityPage() {
         ...(answer.selected_choice !== undefined
           ? { selected_choice: answer.selected_choice }
           : {}),
+        ...(answer.selected_choices?.length
+          ? { selected_choices: answer.selected_choices }
+          : {}),
+        ...(answer.rating_value !== undefined ? { rating_value: answer.rating_value } : {}),
         ...(answer.text_response ? { text_response: answer.text_response.trim() } : {}),
         ...(answer.confidence_value !== undefined
           ? { confidence_value: answer.confidence_value }
@@ -248,7 +261,34 @@ export function StudentActivityPage() {
           </Alert>
         )}
 
-        {googleMode ? (
+        {anonymous ? (
+          <Card borderWidth="1px" borderColor="sand.200">
+            <CardBody>
+              <VStack align="stretch" spacing={3}>
+                <Text fontSize="sm" color="gray.600">
+                  This survey is anonymous. You do not need to give a name.
+                </Text>
+                {joinState.error && (
+                  <FormErrorMessage display="block">
+                    {errorMessage(joinState.error, 'Could not join. Try again.')}
+                  </FormErrorMessage>
+                )}
+                <Button
+                  variant="accent"
+                  size="lg"
+                  w="full"
+                  isLoading={joinState.isLoading}
+                  loadingText="Starting…"
+                  onClick={() =>
+                    void handleJoin({ preventDefault: () => undefined } as React.FormEvent)
+                  }
+                >
+                  Start
+                </Button>
+              </VStack>
+            </CardBody>
+          </Card>
+        ) : googleMode ? (
           <Card borderWidth="1px" borderColor="sand.200">
             <CardBody>
               {studentMe.data ? (
@@ -274,7 +314,9 @@ export function StudentActivityPage() {
                     w="full"
                     isLoading={joinState.isLoading}
                     loadingText="Joining…"
-                    onClick={() => void handleJoin({ preventDefault: () => undefined } as React.FormEvent)}
+                    onClick={() =>
+                      void handleJoin({ preventDefault: () => undefined } as React.FormEvent)
+                    }
                   >
                     Start
                   </Button>
@@ -299,52 +341,52 @@ export function StudentActivityPage() {
             </CardBody>
           </Card>
         ) : (
-        <Card as="form" onSubmit={handleJoin} borderWidth="1px" borderColor="sand.200">
-          <CardBody>
-            <FormControl
-              isInvalid={(showErrors && !identifier.trim()) || Boolean(joinState.error)}
-              isRequired
-            >
-              <FormLabel htmlFor="student-identifier">
-                {roster ? 'Your roster identifier' : 'Your name'}
-              </FormLabel>
-              <Input
-                id="student-identifier"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={roster ? 'e.g. 2024-0431' : 'e.g. Amara J.'}
-                size="lg"
-                autoComplete={roster ? 'off' : 'name'}
-                enterKeyHint="go"
-                maxLength={80}
-              />
-              <FormErrorMessage>
-                {joinState.error
-                  ? errorMessage(joinState.error, 'Could not join. Check with your teacher.')
-                  : 'Please enter something so your teacher knows who answered.'}
-              </FormErrorMessage>
-              {!joinState.error && (
-                <FormHelperText>
-                  {roster
-                    ? 'The identifier your teacher gave you. Nothing else is needed.'
-                    : 'Your teacher will see this next to your answers.'}
-                </FormHelperText>
-              )}
-            </FormControl>
+          <Card as="form" onSubmit={handleJoin} borderWidth="1px" borderColor="sand.200">
+            <CardBody>
+              <FormControl
+                isInvalid={(showErrors && !identifier.trim()) || Boolean(joinState.error)}
+                isRequired
+              >
+                <FormLabel htmlFor="student-identifier">
+                  {roster ? 'Your roster identifier' : 'Your name'}
+                </FormLabel>
+                <Input
+                  id="student-identifier"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={roster ? 'e.g. 2024-0431' : 'e.g. Amara J.'}
+                  size="lg"
+                  autoComplete={roster ? 'off' : 'name'}
+                  enterKeyHint="go"
+                  maxLength={80}
+                />
+                <FormErrorMessage>
+                  {joinState.error
+                    ? errorMessage(joinState.error, 'Could not join. Check with your teacher.')
+                    : 'Please enter something so your teacher knows who answered.'}
+                </FormErrorMessage>
+                {!joinState.error && (
+                  <FormHelperText>
+                    {roster
+                      ? 'The identifier your teacher gave you. Nothing else is needed.'
+                      : 'Your teacher will see this next to your answers.'}
+                  </FormHelperText>
+                )}
+              </FormControl>
 
-            <Button
-              type="submit"
-              variant="accent"
-              size="lg"
-              w="full"
-              mt={5}
-              isLoading={joinState.isLoading}
-              loadingText="Joining…"
-            >
-              Start
-            </Button>
-          </CardBody>
-        </Card>
+              <Button
+                type="submit"
+                variant="accent"
+                size="lg"
+                w="full"
+                mt={5}
+                isLoading={joinState.isLoading}
+                loadingText="Joining…"
+              >
+                Start
+              </Button>
+            </CardBody>
+          </Card>
         )}
       </StudentShell>
     );
@@ -352,7 +394,14 @@ export function StudentActivityPage() {
 
   return (
     <StudentShell subtitle={`${data.activity_title} · ${label}`}>
-      <Box>
+      <Box
+        position="sticky"
+        top={0}
+        zIndex={2}
+        bg="sand.100"
+        py={2}
+        data-testid="student-progress"
+      >
         <Progress
           value={(answeredCount / Math.max(data.questions.length, 1)) * 100}
           size="sm"
@@ -408,6 +457,73 @@ export function StudentActivityPage() {
                       {question.prompt}
                     </Text>
                   </Box>
+
+                  {question.image_url && (
+                    <Image
+                      src={question.image_url}
+                      alt={question.image_alt || ''}
+                      loading="lazy"
+                      w="full"
+                      maxH="320px"
+                      objectFit="contain"
+                      borderRadius="md"
+                      borderWidth="1px"
+                      borderColor="sand.200"
+                      bg="white"
+                    />
+                  )}
+
+                  {question.question_type === 'multi_select' && (
+                    <FormControl isInvalid={isMissing}>
+                      <Stack spacing={2} role="group" aria-labelledby={`prompt-${question.id}`}>
+                        {question.choices.map((choice) => {
+                          const picked = answer.selected_choices ?? [];
+                          const checked = picked.includes(choice.id);
+                          return (
+                            <Box
+                              key={choice.id}
+                              borderWidth="1px"
+                              borderColor={checked ? 'cariteal.500' : 'sand.200'}
+                              bg={checked ? 'cariteal.50' : 'white'}
+                              borderRadius="md"
+                              px={3}
+                              py={3}
+                            >
+                              <Checkbox
+                                isChecked={checked}
+                                colorScheme="cariteal"
+                                onChange={(e) =>
+                                  setAnswer(question.id, {
+                                    selected_choices: e.target.checked
+                                      ? [...picked, choice.id]
+                                      : picked.filter((id) => id !== choice.id),
+                                  })
+                                }
+                              >
+                                <Text fontSize="md">{choice.text}</Text>
+                              </Checkbox>
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                      <FormErrorMessage>Please tick at least one.</FormErrorMessage>
+                    </FormControl>
+                  )}
+
+                  {question.question_type === 'rating' && (
+                    <FormControl isInvalid={isMissing}>
+                      <ConfidenceScale
+                        name={`rating-${question.id}`}
+                        legend="Pick a number from 1 to 5."
+                        value={answer.rating_value}
+                        onChange={(value) => setAnswer(question.id, { rating_value: value })}
+                        scale={data.confidence_scale}
+                        lowLabel={question.rating_low_label || '1'}
+                        highLabel={question.rating_high_label || '5'}
+                      />
+                      <FormErrorMessage>Please pick a number.</FormErrorMessage>
+                    </FormControl>
+                  )}
 
                   {question.question_type === 'multiple_choice' && (
                     <FormControl isInvalid={isMissing}>

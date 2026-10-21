@@ -18,7 +18,13 @@ from dataclasses import asdict, dataclass, field
 from django.conf import settings
 from django.db.models import Prefetch
 
-from caricue.activities.models import Question, QuestionType, normalize_text_answer
+from caricue.activities.models import (
+    RATING_MAX,
+    RATING_MIN,
+    Question,
+    QuestionType,
+    normalize_text_answer,
+)
 from caricue.live.models import LiveSession, Participant, Response
 
 
@@ -46,6 +52,10 @@ class QuestionInsight:
     common_answers: list[dict] = field(default_factory=list)
     confidence_distribution: dict[str, int] = field(default_factory=dict)
     average_confidence: float | None = None
+    # Survey-only figures; empty for quizzes.
+    rating_distribution: dict[str, int] = field(default_factory=dict)
+    average_rating: float | None = None
+    text_answers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -89,6 +99,7 @@ class SessionInsights:
     needs_attention: list[AttentionItem]
     has_confidence_data: bool
     has_auto_scored_data: bool
+    activity_kind: str = "quiz"
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -109,7 +120,9 @@ def build_session_insights(session: LiveSession) -> SessionInsights:
         session.participants.select_related("student").prefetch_related(
             Prefetch(
                 "responses",
-                queryset=Response.objects.select_related("question", "selected_choice"),
+                queryset=Response.objects.select_related(
+                    "question", "selected_choice"
+                ).prefetch_related("selected_choices"),
             )
         )
     )
@@ -204,9 +217,14 @@ def build_session_insights(session: LiveSession) -> SessionInsights:
         lowest_correctness_questions=lowest_correctness_questions,
         high_confidence_incorrect=high_confidence_incorrect,
         low_confidence_correct=low_confidence_correct,
-        needs_attention=_needs_attention(participants, high_conf_threshold),
+        needs_attention=(
+            []
+            if session.activity.is_survey
+            else _needs_attention(participants, high_conf_threshold)
+        ),
         has_confidence_data=bool(confidence_values),
         has_auto_scored_data=bool(auto_scored),
+        activity_kind=session.activity.kind,
     )
 
 
@@ -219,6 +237,23 @@ def _build_question_insight(
     incorrect_count = len(scored) - correct_count
 
     choice_breakdown: list[ChoiceBreakdown] = []
+    if question.question_type == QuestionType.MULTI_SELECT:
+        # A respondent may tick several boxes, so percentages are the share of
+        # respondents who ticked each one and need not add up to 100.
+        counts = Counter(
+            choice.pk for r in responses for choice in r.selected_choices.all()
+        )
+        answered = sum(1 for r in responses if r.selected_choices.all())
+        choice_breakdown = [
+            ChoiceBreakdown(
+                choice_id=choice.pk,
+                text=choice.text,
+                is_correct=False,
+                count=counts.get(choice.pk, 0),
+                percentage=_percentage(counts.get(choice.pk, 0), answered),
+            )
+            for choice in question.choices.all()
+        ]
     if question.question_type == QuestionType.MULTIPLE_CHOICE:
         counts = Counter(
             r.selected_choice_id for r in responses if r.selected_choice_id is not None
@@ -263,6 +298,25 @@ def _build_question_insight(
             for key, count in counter.most_common(limit)
         ]
 
+    rating_distribution: dict[str, int] = {}
+    average_rating: float | None = None
+    if question.question_type == QuestionType.RATING:
+        ratings = [r.rating_value for r in responses if r.rating_value is not None]
+        rating_counts = Counter(ratings)
+        rating_distribution = {
+            str(level): rating_counts.get(level, 0)
+            for level in range(RATING_MIN, RATING_MAX + 1)
+        }
+        average_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
+
+    # In a survey every written answer is shown verbatim: there is no right
+    # answer to group by, and the teacher wants to read them all.
+    text_answers: list[str] = []
+    if question.activity.is_survey and question.question_type == QuestionType.SHORT_TEXT:
+        text_answers = [
+            r.text_response.strip() for r in responses if r.text_response.strip()
+        ]
+
     confidence_values = [
         r.confidence_value for r in responses if r.confidence_value is not None
     ]
@@ -287,6 +341,9 @@ def _build_question_insight(
             if confidence_values
             else None
         ),
+        rating_distribution=rating_distribution,
+        average_rating=average_rating,
+        text_answers=text_answers,
     )
 
 

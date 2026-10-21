@@ -23,34 +23,39 @@ import {
   Tooltip,
   VStack,
 } from '@chakra-ui/react';
-import type { Question, QuestionType } from '@/api/types';
+import type { ActivityKind, Question, QuestionType } from '@/api/types';
 import {
   MAX_CHOICES,
+  QUESTION_TYPES_BY_KIND,
   blankChoice,
   changeQuestionType,
   formatAcceptedAnswers,
+  hasChoices,
   parseAcceptedAnswers,
+  yesNoChoices,
 } from '@/utils/activityDraft';
 import { questionTypeLabel } from '@/utils/insightFormat';
+import { QuestionImageField } from './QuestionImageField';
 
 interface QuestionEditorProps {
   question: Question;
   index: number;
   total: number;
   error?: string;
+  /** A survey is unmarked: no answer key, no confidence, extra question types. */
+  kind?: ActivityKind;
   onChange: (question: Question) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
 }
 
-const TYPE_OPTIONS: QuestionType[] = ['multiple_choice', 'short_text', 'confidence'];
-
 export function QuestionEditor({
   question,
   index,
   total,
   error,
+  kind = 'quiz',
   onChange,
   onRemove,
   onMoveUp,
@@ -58,6 +63,8 @@ export function QuestionEditor({
 }: QuestionEditorProps) {
   const promptId = `question-${index}-prompt`;
   const typeId = `question-${index}-type`;
+  const survey = kind === 'survey';
+  const hasAnswerKey = !survey && question.question_type === 'multiple_choice';
 
   function updateChoice(
     choiceIndex: number,
@@ -84,7 +91,7 @@ export function QuestionEditor({
                 Question {index + 1}
               </Badge>
               <Text fontSize="sm" color="gray.600">
-                {questionTypeLabel(question.question_type)}
+                {questionTypeLabel(question.question_type, kind)}
               </Text>
             </HStack>
             <HStack spacing={1}>
@@ -133,6 +140,8 @@ export function QuestionEditor({
             <FormErrorMessage>{error}</FormErrorMessage>
           </FormControl>
 
+          <QuestionImageField question={question} index={index} onChange={onChange} />
+
           <HStack align="flex-end" spacing={4} wrap="wrap">
             <FormControl maxW="16rem">
               <FormLabel htmlFor={typeId}>Question type</FormLabel>
@@ -143,9 +152,9 @@ export function QuestionEditor({
                   onChange(changeQuestionType(question, e.target.value as QuestionType))
                 }
               >
-                {TYPE_OPTIONS.map((type) => (
+                {QUESTION_TYPES_BY_KIND[kind].map((type: QuestionType) => (
                   <option key={type} value={type}>
-                    {questionTypeLabel(type)}
+                    {questionTypeLabel(type, kind)}
                   </option>
                 ))}
               </Select>
@@ -164,7 +173,7 @@ export function QuestionEditor({
               </FormLabel>
             </FormControl>
 
-            {question.question_type !== 'confidence' && (
+            {!survey && question.question_type !== 'confidence' && (
               <FormControl display="flex" alignItems="center" w="auto">
                 <Switch
                   id={`question-${index}-confidence`}
@@ -182,22 +191,28 @@ export function QuestionEditor({
             )}
           </HStack>
 
-          {question.question_type === 'multiple_choice' && (
+          {hasChoices(question.question_type) && (
             <Box>
               <Text fontWeight="600" fontSize="sm" mb={2}>
-                Choices — tick the correct one(s)
+                {hasAnswerKey
+                  ? 'Choices — tick the correct one(s)'
+                  : question.question_type === 'multi_select'
+                    ? 'Choices — students can tick more than one'
+                    : 'Choices'}
               </Text>
               <Stack spacing={2}>
                 {question.choices.map((choice, choiceIndex) => (
                   <HStack key={choiceIndex} spacing={2}>
-                    <Checkbox
-                      isChecked={choice.is_correct}
-                      onChange={(e) =>
-                        updateChoice(choiceIndex, { is_correct: e.target.checked })
-                      }
-                      colorScheme="cariteal"
-                      aria-label={`Choice ${choiceIndex + 1} of question ${index + 1} is correct`}
-                    />
+                    {hasAnswerKey && (
+                      <Checkbox
+                        isChecked={choice.is_correct}
+                        onChange={(e) =>
+                          updateChoice(choiceIndex, { is_correct: e.target.checked })
+                        }
+                        colorScheme="cariteal"
+                        aria-label={`Choice ${choiceIndex + 1} of question ${index + 1} is correct`}
+                      />
+                    )}
                     <Input
                       value={choice.text}
                       onChange={(e) => updateChoice(choiceIndex, { text: e.target.value })}
@@ -221,21 +236,87 @@ export function QuestionEditor({
                   </HStack>
                 ))}
               </Stack>
-              <Button
-                mt={2}
-                size="sm"
-                variant="outline"
-                isDisabled={question.choices.length >= MAX_CHOICES}
-                onClick={() =>
-                  onChange({ ...question, choices: [...question.choices, blankChoice()] })
-                }
-              >
-                Add choice
-              </Button>
+              <HStack mt={2} spacing={2} wrap="wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  isDisabled={question.choices.length >= MAX_CHOICES}
+                  onClick={() =>
+                    onChange({ ...question, choices: [...question.choices, blankChoice()] })
+                  }
+                >
+                  Add choice
+                </Button>
+                {survey && question.question_type === 'multiple_choice' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onChange({ ...question, choices: yesNoChoices() })}
+                  >
+                    Use Yes / No
+                  </Button>
+                )}
+              </HStack>
             </Box>
           )}
 
-          {question.question_type === 'short_text' && (
+          {question.question_type === 'rating' && (
+            <Box>
+              <Text fontWeight="600" fontSize="sm" mb={2}>
+                Students pick a number from 1 to 5
+              </Text>
+              <HStack spacing={3} align="flex-end" wrap="wrap">
+                <FormControl maxW="12rem">
+                  <FormLabel htmlFor={`question-${index}-low`} fontSize="sm">
+                    Label for 1 (optional)
+                  </FormLabel>
+                  <Input
+                    id={`question-${index}-low`}
+                    value={question.rating_low_label ?? ''}
+                    onChange={(e) =>
+                      onChange({ ...question, rating_low_label: e.target.value })
+                    }
+                    placeholder="e.g. Strongly disagree"
+                    maxLength={60}
+                  />
+                </FormControl>
+                <HStack spacing={2} pb={1}>
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <Box
+                      key={level}
+                      w="32px"
+                      h="32px"
+                      borderWidth="1px"
+                      borderColor="sand.300"
+                      borderRadius="md"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      fontSize="sm"
+                    >
+                      {level}
+                    </Box>
+                  ))}
+                </HStack>
+                <FormControl maxW="12rem">
+                  <FormLabel htmlFor={`question-${index}-high`} fontSize="sm">
+                    Label for 5 (optional)
+                  </FormLabel>
+                  <Input
+                    id={`question-${index}-high`}
+                    value={question.rating_high_label ?? ''}
+                    onChange={(e) =>
+                      onChange({ ...question, rating_high_label: e.target.value })
+                    }
+                    placeholder="e.g. Strongly agree"
+                    maxLength={60}
+                  />
+                </FormControl>
+              </HStack>
+            </Box>
+          )}
+
+          {!survey && question.question_type === 'short_text' && (
             <FormControl>
               <FormLabel htmlFor={`question-${index}-accepted`}>
                 Accepted answers (optional, one per line)

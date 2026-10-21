@@ -24,7 +24,10 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { useCreateFollowUpActivityMutation, useOverviewQuery } from '@/api/caricueApi';
 import { errorMessage } from '@/api/baseQuery';
+import { ReviewSchedulePanel } from '@/components/ReviewSchedulePanel';
 import { EmptyState, ErrorState, LoadingState } from '@/components/StateViews';
+import { useTour } from '@/tour/useTour';
+import { SEGMENT_LABELS, type TourSegment } from '@/tour/steps';
 import { StatTile } from '@/components/StatTile';
 import {
   formatCompletion,
@@ -35,6 +38,7 @@ import {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { onboarding, acceptWelcome, dismissWelcome, replay } = useTour();
   const toast = useToast();
   const [createFollowUp, followUpState] = useCreateFollowUpActivityMutation();
   const { data, isLoading, isError, error, refetch } = useOverviewQuery(undefined, {
@@ -53,6 +57,7 @@ export function DashboardPage() {
     open_sessions,
     recent_results,
     pending_followups,
+    due_reviews = [],
   } = data;
 
   async function handleCreateFollowUp(sessionId: number) {
@@ -82,6 +87,58 @@ export function DashboardPage() {
           </Button>
         </HStack>
       </Flex>
+
+      {!onboarding.dismissed && onboarding.completed.length === 0 && (
+        <Card borderWidth="1px" borderColor="ocean.200" bg="ocean.50">
+          <CardBody>
+            <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
+              <Box>
+                <Heading size="sm">Take a two-minute tour?</Heading>
+                <Text fontSize="sm" color="gray.700" mt={1}>
+                  Create a class, write a check, and record what you will do next. You can skip
+                  any step and replay it later from your account menu.
+                </Text>
+              </Box>
+              <HStack>
+                <Button size="sm" variant="ghost" onClick={dismissWelcome}>
+                  Not now
+                </Button>
+                <Button size="sm" variant="accent" onClick={acceptWelcome}>
+                  Take the tour
+                </Button>
+              </HStack>
+            </Flex>
+          </CardBody>
+        </Card>
+      )}
+
+      {(onboarding.dismissed || onboarding.completed.length > 0) && (
+        <Card borderWidth="1px" borderColor="sand.200">
+          <CardHeader pb={2}>
+            <Flex justify="space-between" align="center">
+              <Heading size="sm">Getting started</Heading>
+              <Button size="xs" variant="ghost" onClick={replay}>
+                Take the tour again
+              </Button>
+            </Flex>
+          </CardHeader>
+          <CardBody pt={0}>
+            <Stack spacing={1}>
+              {(Object.keys(SEGMENT_LABELS) as TourSegment[]).map((segment) => (
+                <HStack key={segment} justify="space-between">
+                  <Text fontSize="sm">{SEGMENT_LABELS[segment]}</Text>
+                  <Badge
+                    colorScheme={onboarding.completed.includes(segment) ? 'cariteal' : 'gray'}
+                    variant="subtle"
+                  >
+                    {onboarding.completed.includes(segment) ? 'Done' : 'Not yet'}
+                  </Badge>
+                </HStack>
+              ))}
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
 
       <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
         <StatTile label="Classes" value={String(counts.classrooms)} accent="ocean" />
@@ -203,6 +260,20 @@ export function DashboardPage() {
         </Card>
       )}
 
+      {due_reviews.length > 0 && (
+        <Card borderWidth="1px" borderColor="ocean.200">
+          <CardHeader pb={2}>
+            <Heading size="sm">Due for review</Heading>
+            <Text fontSize="sm" color="gray.600" mt={1}>
+              These topics are due a short check. Drafting a review never launches it.
+            </Text>
+          </CardHeader>
+          <CardBody pt={0}>
+            <ReviewSchedulePanel items={due_reviews} compact />
+          </CardBody>
+        </Card>
+      )}
+
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
         <Card borderWidth="1px" borderColor="sand.200">
           <CardHeader pb={2}>
@@ -265,7 +336,7 @@ export function DashboardPage() {
             {recent_activities.length === 0 ? (
               <EmptyState
                 title="No activities yet"
-                description="An activity is one to five quick questions you can launch in a couple of minutes."
+                description="An activity is a set of questions you can launch in a couple of minutes."
                 action={
                   <Button as={Link} to="/app/activities/new" size="sm" variant="accent">
                     Create an activity

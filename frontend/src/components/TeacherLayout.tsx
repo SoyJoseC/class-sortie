@@ -15,6 +15,7 @@ import {
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Brand } from './Brand';
 import { useCurrentTeacherQuery, useLogoutMutation } from '@/api/caricueApi';
+import { TourRunner, useTour } from '@/tour/useTour';
 import { APP_NAME, APP_TAGLINE } from '@/branding';
 
 const NAV_ITEMS = [
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
 export function TeacherLayout() {
   const { data: teacher } = useCurrentTeacherQuery();
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const { replay } = useTour();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -95,6 +97,7 @@ export function TeacherLayout() {
                 <MenuItem as={Link} to="/app/profile">
                   Profile
                 </MenuItem>
+                <MenuItem onClick={replay}>Take the tour again</MenuItem>
                 <MenuItem onClick={handleLogout} isDisabled={isLoggingOut}>
                   {isLoggingOut ? 'Signing out…' : 'Sign out'}
                 </MenuItem>
@@ -106,6 +109,7 @@ export function TeacherLayout() {
 
       <Box as="main" id="main" flex="1" py={6}>
         <Container maxW="7xl">
+          <TourRunner />
           <Outlet />
         </Container>
       </Box>

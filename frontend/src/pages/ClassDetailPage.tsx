@@ -43,10 +43,12 @@ import {
   useRemoveEnrollmentMutation,
   useRosterQuery,
   useSessionsQuery,
+  useReviewScheduleQuery,
   useTopicTimelineQuery,
   useUpdateClassroomMutation,
 } from '@/api/caricueApi';
 import { errorMessage, fieldErrors } from '@/api/baseQuery';
+import { ReviewSchedulePanel } from '@/components/ReviewSchedulePanel';
 import { EmptyState, ErrorState, LoadingState } from '@/components/StateViews';
 import { StatTile } from '@/components/StatTile';
 import { formatDateTime, formatPercent, formatSessionCode } from '@/utils/insightFormat';
@@ -61,6 +63,7 @@ export function ClassDetailPage() {
   const activities = useActivitiesQuery({ classroom: classroomId });
   const sessions = useSessionsQuery({ classroom: classroomId });
   const topicTimeline = useTopicTimelineQuery(classroomId);
+  const reviewSchedule = useReviewScheduleQuery(classroomId);
 
   const [addStudent, addState] = useAddStudentToClassMutation();
   const [importRoster, importState] = useImportRosterMutation();
@@ -473,6 +476,15 @@ export function ClassDetailPage() {
               ))}
             </Stack>
           )}
+        </CardBody>
+      </Card>
+
+      <Card borderWidth="1px" borderColor="sand.200">
+        <CardHeader pb={2}>
+          <Heading size="sm">Review schedule</Heading>
+        </CardHeader>
+        <CardBody pt={0}>
+          <ReviewSchedulePanel items={reviewSchedule.data ?? []} />
         </CardBody>
       </Card>
 

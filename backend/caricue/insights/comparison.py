@@ -81,9 +81,7 @@ def find_baseline_session(session: LiveSession) -> LiveSession | None:
     )
 
     matching = [
-        s
-        for s in candidates
-        if topic_for_session(s) == topic and s.pk != session.pk
+        s for s in candidates if topic_for_session(s) == topic and s.pk != session.pk
     ]
     if not matching:
         return None
@@ -102,9 +100,11 @@ def build_session_comparison(
     current: LiveSession, baseline: LiveSession | None = None
 ) -> SessionComparison | None:
     """Compare current session to a baseline; returns None if no baseline."""
+    if current.activity.is_survey:
+        return None  # nothing to compare: a survey is not scored
     if baseline is None:
         baseline = find_baseline_session(current)
-    if baseline is None:
+    if baseline is None or baseline.activity.is_survey:
         return None
     if current.status != SessionStatus.CLOSED:
         return None
@@ -171,12 +171,10 @@ def _align_question_deltas(
     )
 
     current_insights = {
-        q.question_id: q
-        for q in build_session_insights(current).questions
+        q.question_id: q for q in build_session_insights(current).questions
     }
     baseline_insights = {
-        q.question_id: q
-        for q in build_session_insights(baseline).questions
+        q.question_id: q for q in build_session_insights(baseline).questions
     }
 
     deltas: list[QuestionDelta] = []
@@ -187,9 +185,7 @@ def _align_question_deltas(
             source_id = cq["source_question_id"]
             if not source_id:
                 continue
-            bq = next(
-                (q for q in baseline_questions if q["id"] == source_id), None
-            )
+            bq = next((q for q in baseline_questions if q["id"] == source_id), None)
             if bq is None:
                 continue
             b_ins = baseline_insights.get(source_id)
@@ -203,9 +199,7 @@ def _align_question_deltas(
                     baseline_correctness=(
                         b_ins.correctness_percentage if b_ins else None
                     ),
-                    current_correctness=(
-                        c_ins.correctness_percentage if c_ins else None
-                    ),
+                    current_correctness=(c_ins.correctness_percentage if c_ins else None),
                     delta=delta,
                 )
             )
@@ -228,9 +222,7 @@ def _align_question_deltas(
                     baseline_correctness=(
                         b_ins.correctness_percentage if b_ins else None
                     ),
-                    current_correctness=(
-                        c_ins.correctness_percentage if c_ins else None
-                    ),
+                    current_correctness=(c_ins.correctness_percentage if c_ins else None),
                     delta=delta,
                 )
             )
@@ -281,14 +273,10 @@ def _student_movement(
     still_stuck: list[dict] = []
 
     baseline_questions = {
-        q.position: q.pk
-        for q in baseline.activity.questions.all()
-        if q.is_auto_scored
+        q.position: q.pk for q in baseline.activity.questions.all() if q.is_auto_scored
     }
     current_questions = {
-        q.position: q.pk
-        for q in current.activity.questions.all()
-        if q.is_auto_scored
+        q.position: q.pk for q in current.activity.questions.all() if q.is_auto_scored
     }
 
     for student_id in common_ids:
@@ -380,6 +368,7 @@ def build_topic_timeline(classroom) -> list[dict]:
             classroom=classroom,
             status=SessionStatus.CLOSED,
         )
+        .exclude(activity__kind="survey")
         .select_related("activity", "reflection")
         .order_by("closed_at")
     )

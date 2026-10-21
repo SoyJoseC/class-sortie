@@ -38,8 +38,11 @@ services:
       DJANGO_DEBUG: '0'
       POSTGRES_HOST: db
       DJANGO_STATIC_ROOT: /var/www/caricue/static
+      DJANGO_MEDIA_ROOT: /var/www/caricue/media
     volumes:
       - caricue_static:/var/www/caricue/static
+      # Question images: written here, served by Nginx from the same volume.
+      - caricue_media:/var/www/caricue/media
     depends_on:
       db:
         condition: service_healthy
@@ -54,6 +57,8 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - '${HTTP_PORT:-8080}:80'
+    volumes:
+      - caricue_media:/var/www/caricue/media:ro
     depends_on:
       api:
         condition: service_started
@@ -62,3 +67,4 @@ services:
 volumes:
   caricue_db:
   caricue_static:
+  caricue_media:

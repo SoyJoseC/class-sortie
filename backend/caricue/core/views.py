@@ -58,6 +58,7 @@ def client_config(request: Request) -> Response:
             "min_questions": settings.CARICUE["MIN_QUESTIONS_PER_ACTIVITY"],
             "max_questions": settings.CARICUE["MAX_QUESTIONS_PER_ACTIVITY"],
             "max_choices": settings.CARICUE["MAX_CHOICES_PER_QUESTION"],
+            "max_image_bytes": settings.CARICUE["MAX_IMAGE_BYTES"],
             "ai_suggestions_enabled": bool(settings.INSIGHT_LLM_API_KEY),
         }
     )

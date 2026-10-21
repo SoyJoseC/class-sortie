@@ -17,10 +17,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { Link, useParams } from 'react-router-dom';
-import {
-  caricueApi,
-  useSessionDashboardQuery,
-} from '@/api/caricueApi';
+import { caricueApi, useSessionDashboardQuery } from '@/api/caricueApi';
 import { errorMessage } from '@/api/baseQuery';
 import { AnonymousClassSignals } from '@/components/AnonymousClassSignals';
 import { ConfidenceChart } from '@/components/ConfidenceChart';
@@ -74,6 +71,7 @@ export function SessionDiscussPage() {
   }
 
   const { session, facts, suggestions, misconception_cards } = data;
+  const survey = facts.activity_kind === 'survey' || session.activity_kind === 'survey';
 
   return (
     <VStack spacing={5} align="stretch">
@@ -97,12 +95,7 @@ export function SessionDiscussPage() {
           <Button as={Link} to={`/app/sessions/${sessionId}`} variant="outline" size="sm">
             Live results (teacher view)
           </Button>
-          <Button
-            as={Link}
-            to={`/app/sessions/${sessionId}/launch`}
-            variant="ghost"
-            size="sm"
-          >
+          <Button as={Link} to={`/app/sessions/${sessionId}/launch`} variant="ghost" size="sm">
             Show code
           </Button>
         </HStack>
@@ -147,7 +140,12 @@ export function SessionDiscussPage() {
             <Text fontSize="sm" color="gray.600" aria-live="polite">
               {isFetching ? 'Updating…' : `Updated ${formatRelativeTime(lastUpdated)}`}
             </Text>
-            <Button size="xs" variant="ghost" onClick={() => void refetch()} isLoading={isFetching}>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => void refetch()}
+              isLoading={isFetching}
+            >
               Refresh now
             </Button>
           </HStack>
@@ -164,33 +162,35 @@ export function SessionDiscussPage() {
           label="Completion"
           value={formatPercent(facts.completion_percentage)}
           help={
-            facts.roster_size > 0
-              ? `Roster of ${facts.roster_size}`
-              : 'No roster size on file'
+            facts.roster_size > 0 ? `Roster of ${facts.roster_size}` : 'No roster size on file'
           }
           accent="cariteal"
         />
-        <StatTile
-          label="Auto-scored correct"
-          value={formatPercent(facts.overall_correctness_percentage)}
-          help={
-            facts.has_auto_scored_data
-              ? `${facts.auto_scored_response_count} scored answers`
-              : 'No auto-scored answers yet'
-          }
-          accent="coral"
-        />
-        <StatTile
-          label="Average confidence"
-          value={formatConfidence(facts.average_confidence)}
-          help={facts.has_confidence_data ? 'Self-reported, 1-5' : 'Not collected'}
-          accent="gray"
-        />
+        {!survey && (
+          <StatTile
+            label="Auto-scored correct"
+            value={formatPercent(facts.overall_correctness_percentage)}
+            help={
+              facts.has_auto_scored_data
+                ? `${facts.auto_scored_response_count} scored answers`
+                : 'No auto-scored answers yet'
+            }
+            accent="coral"
+          />
+        )}
+        {!survey && (
+          <StatTile
+            label="Average confidence"
+            value={formatConfidence(facts.average_confidence)}
+            help={facts.has_confidence_data ? 'Self-reported, 1-5' : 'Not collected'}
+            accent="gray"
+          />
+        )}
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, xl: 3 }} spacing={5}>
         <VStack spacing={5} align="stretch" gridColumn={{ xl: 'span 2' }}>
-          {facts.lowest_correctness_questions.length > 0 && (
+          {!survey && facts.lowest_correctness_questions.length > 0 && (
             <Card borderWidth="1px" borderColor="sand.200">
               <CardBody>
                 <HStack justify="space-between" mb={3}>
@@ -238,7 +238,11 @@ export function SessionDiscussPage() {
             ) : (
               <VStack spacing={4} align="stretch">
                 {facts.questions.map((question) => (
-                  <QuestionInsightCard key={question.question_id} question={question} />
+                  <QuestionInsightCard
+                    key={question.question_id}
+                    question={question}
+                    survey={survey}
+                  />
                 ))}
               </VStack>
             )}
@@ -263,13 +267,16 @@ export function SessionDiscussPage() {
             </Card>
           )}
 
-          <AnonymousClassSignals facts={facts} />
+          {!survey && <AnonymousClassSignals facts={facts} />}
 
-          {facts.submitted_count > 0 && misconception_cards && misconception_cards.length > 0 && (
-            <MisconceptionCardPanel sessionId={sessionId} cards={misconception_cards} />
-          )}
+          {!survey &&
+            facts.submitted_count > 0 &&
+            misconception_cards &&
+            misconception_cards.length > 0 && (
+              <MisconceptionCardPanel sessionId={sessionId} cards={misconception_cards} />
+            )}
 
-          <SuggestionPanel suggestions={suggestions} />
+          {!survey && <SuggestionPanel suggestions={suggestions} />}
         </VStack>
       </SimpleGrid>
     </VStack>

@@ -25,7 +25,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { Activity, Classroom, IdentityMode, Question } from '@/api/types';
+import type { Activity, ActivityKind, Classroom, IdentityMode, Question } from '@/api/types';
 import {
   useActivityQuery,
   useClassroomsQuery,
@@ -37,9 +37,11 @@ import { errorMessage, fieldErrors } from '@/api/baseQuery';
 import { ErrorState, LoadingState } from '@/components/StateViews';
 import { QuestionEditor } from '@/components/QuestionEditor';
 import { StudentPreview } from '@/components/StudentPreview';
+import { useActivityLimits } from '@/hooks/useActivityLimits';
+import { useTourSegment } from '@/tour/useTour';
 import {
-  MAX_QUESTIONS,
   blankQuestion,
+  convertQuestionsForKind,
   isDraftValid,
   moveQuestion,
   toWritePayload,
@@ -84,6 +86,7 @@ function ActivityBuilder({
   classrooms: Classroom[];
 }) {
   const navigate = useNavigate();
+  useTourSegment('activity');
   const toast = useToast();
   const [searchParams] = useSearchParams();
 
@@ -100,15 +103,23 @@ function ActivityBuilder({
       numberOrNull(searchParams.get('classroom')) ??
       (classrooms.length === 1 ? classrooms[0].id : null)
   );
+  const [kind, setKind] = useState<ActivityKind>(activity?.kind ?? 'quiz');
   const [questions, setQuestions] = useState<Question[]>(
-    activity?.questions.length ? activity.questions : [blankQuestion()]
+    activity?.questions.length
+      ? activity.questions
+      : [blankQuestion('multiple_choice', activity?.kind ?? 'quiz')]
   );
   const [identityMode, setIdentityMode] = useState<IdentityMode>('display_name');
   const [showErrors, setShowErrors] = useState(false);
+  const kindLocked = Boolean(activity && activity.open_session_count > 0);
 
   const isEditing = Boolean(activity);
-  const draft = useMemo(() => ({ title, classroom, questions }), [title, classroom, questions]);
-  const errors = useMemo(() => validateDraft(draft), [draft]);
+  const limits = useActivityLimits();
+  const draft = useMemo(
+    () => ({ title, classroom, questions, kind }),
+    [title, classroom, questions, kind]
+  );
+  const errors = useMemo(() => validateDraft(draft, limits), [draft, limits]);
   const valid = isDraftValid(errors);
 
   const mutationError = createState.error ?? updateState.error ?? launchState.error;
@@ -122,8 +133,9 @@ function ActivityBuilder({
       classroom,
       title: title.trim(),
       topic: topic.trim(),
+      kind,
       status,
-      questions: toWritePayload({ title, classroom, questions }),
+      questions: toWritePayload({ title, classroom, questions, kind }),
     };
     if (activity) {
       return update({ id: activity.id, body }).unwrap();
@@ -163,8 +175,9 @@ function ActivityBuilder({
         <Box>
           <Heading size="lg">{isEditing ? 'Edit activity' : 'Create an activity'}</Heading>
           <Text color="gray.600">
-            One to {MAX_QUESTIONS} questions. Short enough to run in the last five minutes of a
-            lesson.
+            {kind === 'survey'
+              ? 'A survey is unmarked: collect opinions, not scores. Anonymous join is available.'
+              : 'A quiz is marked. Add as many questions as you need for an end-of-lesson check or a full paper.'}
           </Text>
         </Box>
         <HStack flexWrap="wrap">
@@ -195,6 +208,7 @@ function ActivityBuilder({
           </Button>
           <Button
             variant="accent"
+            data-tour="activity-launch"
             onClick={handleLaunch}
             isLoading={launchState.isLoading || isSaving}
             loadingText="Launching…"
@@ -254,7 +268,11 @@ function ActivityBuilder({
           <Card borderWidth="1px" borderColor="sand.200">
             <CardBody>
               <VStack spacing={4} align="stretch">
-                <FormControl isInvalid={showErrors && Boolean(errors.title)} isRequired>
+                <FormControl
+                  isInvalid={showErrors && Boolean(errors.title)}
+                  isRequired
+                  data-tour="activity-title"
+                >
                   <FormLabel htmlFor="activity-title">Title</FormLabel>
                   <Input
                     id="activity-title"
@@ -278,7 +296,11 @@ function ActivityBuilder({
                   </FormHelperText>
                 </FormControl>
 
-                <FormControl isInvalid={showErrors && Boolean(errors.classroom)} isRequired>
+                <FormControl
+                  isInvalid={showErrors && Boolean(errors.classroom)}
+                  isRequired
+                  data-tour="activity-classroom"
+                >
                   <FormLabel htmlFor="activity-classroom">Class</FormLabel>
                   <Select
                     id="activity-classroom"
@@ -296,20 +318,61 @@ function ActivityBuilder({
                   </Select>
                   <FormErrorMessage>{errors.classroom}</FormErrorMessage>
                 </FormControl>
+
+                <FormControl>
+                  <FormLabel>What is this?</FormLabel>
+                  <RadioGroup
+                    value={kind}
+                    onChange={(value) => {
+                      const next = value as ActivityKind;
+                      if (next === kind) return;
+                      setKind(next);
+                      setQuestions((current) => convertQuestionsForKind(current, next));
+                      if (next === 'quiz' && identityMode === 'anonymous') {
+                        setIdentityMode('display_name');
+                      }
+                    }}
+                    isDisabled={kindLocked}
+                  >
+                    <Stack spacing={2}>
+                      <Radio value="quiz" colorScheme="cariteal">
+                        <Box>
+                          <Text fontWeight="600">Quiz</Text>
+                          <Text fontSize="sm" color="gray.600">
+                            Marked. Students get a score; you see who needs help.
+                          </Text>
+                        </Box>
+                      </Radio>
+                      <Radio value="survey" colorScheme="cariteal">
+                        <Box>
+                          <Text fontWeight="600">Survey</Text>
+                          <Text fontSize="sm" color="gray.600">
+                            Unmarked. Collect opinions, ratings, and written comments.
+                          </Text>
+                        </Box>
+                      </Radio>
+                    </Stack>
+                  </RadioGroup>
+                  {kindLocked && (
+                    <FormHelperText>
+                      The kind cannot change after a session has been launched.
+                    </FormHelperText>
+                  )}
+                </FormControl>
               </VStack>
             </CardBody>
           </Card>
 
-          <Box>
+          <Box data-tour="activity-question">
             <Flex justify="space-between" align="center" mb={3}>
-              <Heading size="md">
-                Questions ({questions.length}/{MAX_QUESTIONS})
-              </Heading>
+              <Heading size="md">Questions ({questions.length})</Heading>
               <Button
                 size="sm"
                 variant="outline"
-                isDisabled={questions.length >= MAX_QUESTIONS}
-                onClick={() => setQuestions([...questions, blankQuestion()])}
+                isDisabled={questions.length >= limits.maxQuestions}
+                onClick={() =>
+                  setQuestions([...questions, blankQuestion('multiple_choice', kind)])
+                }
               >
                 Add question
               </Button>
@@ -329,11 +392,24 @@ function ActivityBuilder({
                   question={question}
                   index={index}
                   total={questions.length}
+                  kind={kind}
                   error={showErrors ? errors.byQuestion[index] : undefined}
                   onChange={(next) =>
                     setQuestions(questions.map((q, i) => (i === index ? next : q)))
                   }
-                  onRemove={() => setQuestions(questions.filter((_, i) => i !== index))}
+                  onRemove={() => {
+                    const held = question.response_count ?? 0;
+                    if (
+                      held > 0 &&
+                      !window.confirm(
+                        `This question already has ${held} student answer${held === 1 ? '' : 's'}. ` +
+                          'Removing it deletes those answers when you save. Remove it anyway?'
+                      )
+                    ) {
+                      return;
+                    }
+                    setQuestions(questions.filter((_, i) => i !== index));
+                  }}
                   onMoveUp={() => setQuestions(moveQuestion(questions, index, index - 1))}
                   onMoveDown={() => setQuestions(moveQuestion(questions, index, index + 1))}
                 />
@@ -373,17 +449,29 @@ function ActivityBuilder({
                       <Box>
                         <Text fontWeight="600">School Google account</Text>
                         <Text fontSize="sm" color="gray.600">
-                          Students sign in with Google. Their school email must be on the
-                          class roster.
+                          Students sign in with Google. Their school email must be on the class
+                          roster.
                         </Text>
                       </Box>
                     </Radio>
+                    {kind === 'survey' && (
+                      <Radio value="anonymous" colorScheme="cariteal">
+                        <Box>
+                          <Text fontWeight="600">Anonymous</Text>
+                          <Text fontSize="sm" color="gray.600">
+                            Nobody is asked for a name. Only available for surveys.
+                          </Text>
+                        </Box>
+                      </Radio>
+                    )}
                   </Stack>
                 </RadioGroup>
 
                 <Divider />
 
-                <Heading size="sm">Student preview</Heading>
+                <Heading size="sm" data-tour="activity-preview">
+                  Student preview
+                </Heading>
                 <Text fontSize="sm" color="gray.600">
                   This is what a student sees. Correct answers are never sent to their device.
                 </Text>

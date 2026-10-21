@@ -1,10 +1,14 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
 import { caricueApi } from './api/caricueApi';
+import { tourSlice } from './tour/tourSlice';
 
 export function createStore() {
   const store = configureStore({
-    reducer: { [caricueApi.reducerPath]: caricueApi.reducer },
+    reducer: {
+      [caricueApi.reducerPath]: caricueApi.reducer,
+      tour: tourSlice.reducer,
+    },
     middleware: (getDefault) => getDefault().concat(caricueApi.middleware),
   });
   // Refetch when the tab regains focus or the network comes back, which

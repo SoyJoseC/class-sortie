@@ -23,6 +23,13 @@ function answerSummary(response: ParticipantResponse): string {
   if (response.question_type === 'multiple_choice') {
     return response.selected_choice_text ?? '(no choice)';
   }
+  if (response.question_type === 'multi_select') {
+    const texts = response.selected_choice_texts ?? [];
+    return texts.length ? texts.join(', ') : '(none ticked)';
+  }
+  if (response.question_type === 'rating') {
+    return response.rating_value != null ? `Rated ${response.rating_value}` : '(no rating)';
+  }
   if (response.question_type === 'short_text') {
     return response.text_response?.trim() || '(empty)';
   }

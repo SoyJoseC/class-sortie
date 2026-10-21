@@ -130,7 +130,9 @@ class LiveSessionViewSet(OwnedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
         session = self.get_object()
         insights = build_session_insights(session)
         participants = session.participants.select_related("student").prefetch_related(
-            "responses__question", "responses__selected_choice"
+            "responses__question",
+            "responses__selected_choice",
+            "responses__selected_choices",
         )
         reflection = getattr(session, "reflection", None)
         misconception_cards = [
@@ -167,9 +169,7 @@ class LiveSessionViewSet(OwnedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="follow-up-activity")
     def follow_up_activity(self, request: Request, pk: str | None = None) -> ApiResponse:
         session = self.get_object()
-        question_ids = request.data.get("question_ids") or request.data.get(
-            "card_ids"
-        )
+        question_ids = request.data.get("question_ids") or request.data.get("card_ids")
         include_confidence = request.data.get("include_confidence", True)
         try:
             activity = create_follow_up_activity(
@@ -189,7 +189,9 @@ class LiveSessionViewSet(OwnedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     def participants(self, request: Request, pk: str | None = None) -> ApiResponse:
         session = self.get_object()
         queryset = session.participants.select_related("student").prefetch_related(
-            "responses__question", "responses__selected_choice"
+            "responses__question",
+            "responses__selected_choice",
+            "responses__selected_choices",
         )
         return ApiResponse(ParticipantSerializer(queryset, many=True).data)
 
@@ -297,6 +299,8 @@ class PublicJoinView(APIView):
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
             identifier = account.email
+        elif session.identity_mode == IdentityMode.ANONYMOUS:
+            identifier = ""  # nobody is asked for a name
         else:
             serializer = PublicJoinSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -414,6 +418,7 @@ class TeacherOverviewView(APIView):
                     "session": LiveSessionSerializer(
                         session, context={"request": request}
                     ).data,
+                    "activity_kind": insights.activity_kind,
                     "submitted_count": insights.submitted_count,
                     "completion_percentage": insights.completion_percentage,
                     "overall_correctness_percentage": (
@@ -427,6 +432,15 @@ class TeacherOverviewView(APIView):
             )
 
         pending_followups = _pending_followups(teacher)
+        from caricue.reviews.models import ReviewItem
+        from caricue.reviews.schedule import due_queryset
+        from caricue.reviews.serializers import ReviewItemSerializer
+
+        due_reviews = due_queryset(
+            ReviewItem.objects.filter(classroom__teacher=teacher).select_related(
+                "classroom", "last_session"
+            )
+        )
 
         context = {"request": request}
         return ApiResponse(
@@ -448,6 +462,7 @@ class TeacherOverviewView(APIView):
                 ).data,
                 "recent_results": recent_results,
                 "pending_followups": pending_followups,
+                "due_reviews": ReviewItemSerializer(due_reviews, many=True).data,
                 "counts": {
                     "classrooms": classrooms.count(),
                     "activities": Activity.objects.filter(teacher=teacher).count(),
@@ -474,6 +489,7 @@ def _pending_followups(teacher) -> list[dict]:
             reflection__plan_impact=PlanImpact.CHANGED,
             closed_at__lte=cutoff,
         )
+        .exclude(activity__kind="survey")
         .select_related("activity", "classroom", "reflection")
         .order_by("-closed_at")
     )
@@ -492,8 +508,7 @@ def _pending_followups(teacher) -> list[dict]:
             closed_at__gt=session.closed_at,
         )
         has_newer_same_topic = any(
-            topic_for_session(s) == topic_key[1]
-            for s in newer.select_related("activity")
+            topic_for_session(s) == topic_key[1] for s in newer.select_related("activity")
         )
         if has_newer_same_topic:
             continue

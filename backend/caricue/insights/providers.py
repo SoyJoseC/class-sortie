@@ -373,6 +373,8 @@ def get_insight_provider() -> BaseInsightProvider:
 
 
 def generate_suggestions(insights: SessionInsights) -> list[dict]:
+    if insights.activity_kind == "survey":
+        return []  # nothing to teach back from an unmarked questionnaire
     provider = get_insight_provider()
     try:
         suggestions = provider.generate(insights)

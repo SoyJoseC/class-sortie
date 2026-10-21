@@ -256,5 +256,8 @@ describe('questionTypeLabel', () => {
     expect(questionTypeLabel('multiple_choice')).toBe('Multiple choice');
     expect(questionTypeLabel('short_text')).toBe('Short text');
     expect(questionTypeLabel('confidence')).toBe('Confidence 1-5');
+    expect(questionTypeLabel('multi_select')).toBe('Multi-select');
+    expect(questionTypeLabel('rating')).toBe('Rating 1-5');
+    expect(questionTypeLabel('multiple_choice', 'survey')).toBe('Single choice');
   });
 });

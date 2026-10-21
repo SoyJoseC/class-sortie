@@ -10,11 +10,16 @@ from dataclasses import dataclass, field
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from caricue.activities.models import ActivityStatus, QuestionType
+from caricue.activities.models import (
+    CHOICE_TYPES,
+    ActivityKind,
+    ActivityStatus,
+    QuestionType,
+)
 from caricue.activities.serializers import ActivitySerializer
 from caricue.classroom.models import Classroom
 
-CSV_COLUMNS = (
+REQUIRED_CSV_COLUMNS = (
     "activity_title",
     "activity_topic",
     "question_position",
@@ -27,6 +32,10 @@ CSV_COLUMNS = (
     "choice_text",
     "is_correct",
 )
+# Added for surveys. Optional on import so files written before surveys existed
+# still load; always written on export.
+OPTIONAL_CSV_COLUMNS = ("activity_kind", "rating_low_label", "rating_high_label")
+CSV_COLUMNS = REQUIRED_CSV_COLUMNS + OPTIONAL_CSV_COLUMNS
 
 MAX_FILE_BYTES = 256 * 1024
 MAX_ROWS = 50
@@ -102,15 +111,21 @@ def _parse_activity_payload(data: dict) -> dict:
             "collect_confidence": bool(question.get("collect_confidence", False)),
             "accepted_answers": question.get("accepted_answers") or [],
             "choices": question.get("choices") or [],
+            "rating_low_label": (question.get("rating_low_label") or "").strip(),
+            "rating_high_label": (question.get("rating_high_label") or "").strip(),
         }
         questions.append(entry)
     title = (data.get("title") or "").strip()
     topic = (data.get("topic") or "").strip()
     if not title:
         raise ActivityImportError("Activity title is required.")
+    kind = (data.get("kind") or data.get("activity_kind") or ActivityKind.QUIZ).strip()
+    if kind not in ActivityKind.values:
+        raise ActivityImportError(f"Unknown activity kind {kind!r}.")
     return {
         "title": title,
         "topic": topic,
+        "kind": kind,
         "status": ActivityStatus.DRAFT,
         "questions": questions,
     }
@@ -140,11 +155,9 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
         raise ActivityImportError("The CSV has no header row.")
 
     headers = {name.strip() for name in reader.fieldnames if name}
-    missing = [col for col in CSV_COLUMNS if col not in headers]
+    missing = [col for col in REQUIRED_CSV_COLUMNS if col not in headers]
     if missing:
-        raise ActivityImportError(
-            f"Missing required columns: {', '.join(missing)}."
-        )
+        raise ActivityImportError(f"Missing required columns: {', '.join(missing)}.")
 
     row_errors: list[RowError] = []
     rows: list[tuple[int, dict[str, str]]] = []
@@ -165,6 +178,11 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
     activity_topic = rows[0][1]["activity_topic"].strip()
     if not activity_title:
         raise ActivityImportError("activity_title is required on every row.")
+    activity_kind = (rows[0][1].get("activity_kind") or "").strip() or ActivityKind.QUIZ
+    if activity_kind not in ActivityKind.values:
+        raise ActivityImportError(
+            f"activity_kind must be one of: {', '.join(ActivityKind.values)}."
+        )
 
     questions: dict[int, dict] = {}
     for line_number, row in rows:
@@ -224,6 +242,8 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
                 "collect_confidence": collect_confidence,
                 "accepted_answers": [],
                 "choices": [],
+                "rating_low_label": (row.get("rating_low_label") or "").strip(),
+                "rating_high_label": (row.get("rating_high_label") or "").strip(),
             },
         )
         if question["prompt"] != prompt or question["question_type"] != q_type:
@@ -235,21 +255,24 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
             )
             continue
 
-        if q_type == QuestionType.MULTIPLE_CHOICE:
+        if q_type in CHOICE_TYPES:
             choice_text = row["choice_text"].strip()
             if not choice_text:
                 row_errors.append(
                     RowError(
                         line_number,
-                        "choice_text is required for multiple-choice rows.",
+                        "choice_text is required for choice rows.",
                     )
                 )
                 continue
             try:
                 choice_position = int(row["choice_position"])
-                is_correct = _parse_bool(
-                    row["is_correct"], line=line_number, field_name="is_correct"
-                )
+                if q_type == QuestionType.MULTI_SELECT and not row["is_correct"].strip():
+                    is_correct = False  # multi-select has no answer key
+                else:
+                    is_correct = _parse_bool(
+                        row["is_correct"], line=line_number, field_name="is_correct"
+                    )
             except ValueError as exc:
                 row_errors.append(RowError(line_number, str(exc)))
                 continue
@@ -268,7 +291,10 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
                 ]
         elif row.get("choice_text", "").strip() or row.get("choice_position", "").strip():
             row_errors.append(
-                RowError(line_number, "Only multiple-choice rows may include choices.")
+                RowError(
+                    line_number,
+                    "Only multiple-choice and multi-select rows may include choices.",
+                )
             )
 
     if row_errors:
@@ -285,6 +311,7 @@ def parse_activity_csv(raw: bytes) -> tuple[dict, list[RowError]]:
     payload = {
         "title": activity_title,
         "topic": activity_topic,
+        "kind": activity_kind,
         "status": ActivityStatus.DRAFT,
         "questions": ordered_questions,
     }

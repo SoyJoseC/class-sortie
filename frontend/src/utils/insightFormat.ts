@@ -1,4 +1,5 @@
 import type {
+  ActivityKind,
   AttentionItem,
   ConfidenceDistribution,
   QuestionInsight,
@@ -41,11 +42,15 @@ export function formatCompletion(
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   multiple_choice: 'Multiple choice',
+  multi_select: 'Multi-select',
+  rating: 'Rating 1-5',
   short_text: 'Short text',
   confidence: 'Confidence 1-5',
 };
 
-export function questionTypeLabel(type: QuestionType): string {
+export function questionTypeLabel(type: QuestionType, kind: ActivityKind = 'quiz'): string {
+  // Nothing is marked in a survey, so "multiple choice" really means "pick one".
+  if (kind === 'survey' && type === 'multiple_choice') return 'Single choice';
   return QUESTION_TYPE_LABELS[type] ?? type;
 }
 

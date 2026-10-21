@@ -16,6 +16,8 @@ gunicorn==23.0.0
     # via -r requirements.in
 packaging==26.3
     # via gunicorn
+pillow==11.3.0
+    # via -r requirements.in
 psycopg==3.2.13
     # via -r requirements.in
 psycopg-binary==3.2.13

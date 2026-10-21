@@ -44,7 +44,12 @@ class MisconceptionCard:
 
 
 def build_misconception_cards(insights: SessionInsights) -> list[MisconceptionCard]:
-    """Return up to three misconception cards ranked by severity."""
+    """Return up to three misconception cards ranked by severity.
+
+    A survey has no right answers, so there is nothing to misunderstand.
+    """
+    if insights.activity_kind == "survey":
+        return []
     low_threshold = settings.CARICUE["LOW_CORRECTNESS_THRESHOLD"]
     hc_wrong_by_question = _high_confidence_wrong_counts(insights)
 

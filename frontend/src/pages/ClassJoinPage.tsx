@@ -13,11 +13,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import {
-  useJoinClassMutation,
-  usePublicClassQuery,
-  useStudentMeQuery,
-} from '@/api/caricueApi';
+import { useJoinClassMutation, usePublicClassQuery, useStudentMeQuery } from '@/api/caricueApi';
 import { errorMessage } from '@/api/baseQuery';
 import { ErrorState, LoadingState } from '@/components/StateViews';
 import { StudentShell } from '@/components/StudentShell';
@@ -101,7 +97,8 @@ export function ClassJoinPage() {
         <Alert status="warning" borderRadius="md">
           <AlertIcon />
           <Text fontSize="sm">
-            This class is not accepting self-enrollment. Ask your teacher to add you to the roster.
+            This class is not accepting self-enrollment. Ask your teacher to add you to the
+            roster.
           </Text>
         </Alert>
       </StudentShell>

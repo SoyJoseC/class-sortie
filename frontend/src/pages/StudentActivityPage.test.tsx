@@ -103,6 +103,28 @@ describe('StudentActivityPage', () => {
     vi.unstubAllGlobals();
   });
 
+  it('shows a question picture with its description', async () => {
+    const user = userEvent.setup();
+    const base = publicSession();
+    renderPage({
+      session: {
+        ...base,
+        questions: [
+          {
+            ...base.questions[0],
+            image_url: '/media/question-images/abc.png',
+            image_alt: 'Router joining two switches',
+          },
+          base.questions[1],
+        ],
+      },
+    });
+    await join(user);
+
+    const picture = await screen.findByAltText('Router joining two switches');
+    expect(picture).toHaveAttribute('src', '/media/question-images/abc.png');
+  });
+
   it('asks for a name, then shows the questions', async () => {
     const user = userEvent.setup();
     renderPage();
@@ -226,5 +248,59 @@ describe('StudentActivityPage', () => {
     expect(await screen.findByText('0 of 2 answered')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /router/i }));
     await waitFor(() => expect(screen.getByText('1 of 2 answered')).toBeInTheDocument());
+  });
+
+  it('joins a survey without asking for a name', async () => {
+    const user = userEvent.setup();
+    const { bodies } = renderPage({
+      session: publicSession({
+        identity_mode: 'anonymous',
+        activity_kind: 'survey',
+        activity_title: 'Unit feedback',
+        questions: [
+          {
+            id: 21,
+            position: 1,
+            prompt: 'Which topics were useful?',
+            question_type: 'multi_select',
+            is_required: true,
+            collect_confidence: false,
+            choices: [
+              { id: 201, text: 'Cabling', position: 1 },
+              { id: 202, text: 'Switches', position: 2 },
+            ],
+          },
+          {
+            id: 22,
+            position: 2,
+            prompt: 'How was the pace?',
+            question_type: 'rating',
+            rating_low_label: 'Too slow',
+            rating_high_label: 'Too fast',
+            is_required: true,
+            collect_confidence: false,
+            choices: [],
+          },
+        ],
+      }),
+    });
+
+    await screen.findByText(/unit feedback|activity not found|loading activity|cabling/i);
+    expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
+    const start = screen.queryByRole('button', { name: /start/i });
+    if (start) await user.click(start);
+
+    await user.click(await screen.findByText('Cabling'));
+    await user.click(screen.getByRole('radio', { name: '5' }));
+    await user.click(screen.getByRole('button', { name: /submit answers/i }));
+
+    expect(await screen.findByRole('heading', { name: /answers sent/i })).toBeInTheDocument();
+    const submission = bodies.find((body) => body && 'answers' in (body as object)) as {
+      answers: { question: number; selected_choices?: number[]; rating_value?: number }[];
+    };
+    expect(submission.answers).toEqual([
+      { question: 21, selected_choices: [201] },
+      { question: 22, rating_value: 5 },
+    ]);
   });
 });

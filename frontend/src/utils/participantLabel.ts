@@ -13,7 +13,10 @@ export function rosterNameIfDifferent(
 ): string | null {
   if (participant.student == null) return null;
   const entered = participant.display_name?.trim();
-  if (!entered || entered.localeCompare(participant.label, undefined, { sensitivity: 'accent' }) === 0) {
+  if (
+    !entered ||
+    entered.localeCompare(participant.label, undefined, { sensitivity: 'accent' }) === 0
+  ) {
     return null;
   }
   return participant.label;

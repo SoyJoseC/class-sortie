@@ -162,7 +162,7 @@ export function ActivityListPage() {
       {data.results.length === 0 ? (
         <EmptyState
           title="No activities yet"
-          description="An activity is one to five questions you can launch in a couple of minutes. Students join with a code — no accounts needed."
+          description="An activity is a set of questions you can launch in a couple of minutes. Students join with a code — no accounts needed."
           action={
             <Button as={Link} to="/app/activities/new" variant="accent">
               Create an activity
@@ -179,6 +179,7 @@ export function ActivityListPage() {
                   <Th>Class</Th>
                   <Th>Topic</Th>
                   <Th isNumeric>Questions</Th>
+                  <Th>Kind</Th>
                   <Th>Status</Th>
                   <Th>Created</Th>
                   <Th />
@@ -195,6 +196,14 @@ export function ActivityListPage() {
                       </Text>
                     </Td>
                     <Td isNumeric>{activity.question_count}</Td>
+                    <Td>
+                      <Badge
+                        colorScheme={activity.kind === 'survey' ? 'ocean' : 'gray'}
+                        variant="subtle"
+                      >
+                        {activity.kind === 'survey' ? 'Survey' : 'Quiz'}
+                      </Badge>
+                    </Td>
                     <Td>
                       <Badge
                         colorScheme={activity.status === 'published' ? 'cariteal' : 'gray'}

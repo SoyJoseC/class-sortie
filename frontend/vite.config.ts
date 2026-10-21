@@ -20,6 +20,8 @@ export default defineConfig({
     proxy: {
       '/api': { target: API_TARGET, changeOrigin: true },
       '/django-admin': { target: API_TARGET, changeOrigin: true },
+      // Uploaded question images (served by Django when DEBUG is on).
+      '/media': { target: API_TARGET, changeOrigin: true },
     },
   },
   build: {

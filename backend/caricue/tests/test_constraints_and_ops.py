@@ -265,7 +265,10 @@ def test_client_config_exposes_no_secrets(api, settings):
     assert response.data["ai_suggestions_enabled"] is True
     assert "super-secret-value" not in str(response.data)
     assert 3 <= response.data["dashboard_poll_seconds"] <= 5
-    assert response.data["max_questions"] == 5
+    assert (
+        response.data["max_questions"] == settings.CARICUE["MAX_QUESTIONS_PER_ACTIVITY"]
+    )
+    assert response.data["max_questions"] >= 50
 
 
 # --------------------------------------------------------------------------- #

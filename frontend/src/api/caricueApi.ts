@@ -22,6 +22,8 @@ import type {
   PublicSession,
   PublicSubmitResult,
   PublicAnswer,
+  QuestionImageUpload,
+  ReviewItem,
   RosterImportResult,
   SessionResults,
   Student,
@@ -44,6 +46,7 @@ export const caricueApi = createApi({
     'Dashboard',
     'Reflection',
     'Overview',
+    'Review',
   ],
   endpoints: (build) => ({
     // -- meta ------------------------------------------------------------ //
@@ -88,12 +91,13 @@ export const caricueApi = createApi({
         'Reflection',
       ],
     }),
-    updateProfile: build.mutation<Teacher, Partial<Pick<Teacher, 'full_name' | 'school_name'>>>(
-      {
-        query: (body) => ({ url: 'auth/me/', method: 'PATCH', body }),
-        invalidatesTags: ['Teacher'],
-      }
-    ),
+    updateProfile: build.mutation<
+      Teacher,
+      Partial<Pick<Teacher, 'full_name' | 'school_name' | 'onboarding'>>
+    >({
+      query: (body) => ({ url: 'auth/me/', method: 'PATCH', body }),
+      invalidatesTags: ['Teacher'],
+    }),
     studentMe: build.query<StudentAccount, void>({
       query: () => 'auth/student/me/',
     }),
@@ -131,6 +135,26 @@ export const caricueApi = createApi({
     topicTimeline: build.query<TopicTimelineGroup[], number>({
       query: (classroomId) => `classrooms/${classroomId}/topic-timeline/`,
       providesTags: (_r, _e, id) => [{ type: 'Classroom', id }],
+    }),
+    reviewSchedule: build.query<ReviewItem[], number>({
+      query: (classroomId) => `classrooms/${classroomId}/review-schedule/`,
+      providesTags: (_r, _e, id) => [{ type: 'Review', id }],
+    }),
+    dueReviews: build.query<ReviewItem[], void>({
+      query: () => 'review/due/',
+      providesTags: ['Review', 'Overview'],
+    }),
+    createReviewActivity: build.mutation<{ activity_id: number }, number>({
+      query: (id) => ({ url: `review-items/${id}/create-activity/`, method: 'POST' }),
+      invalidatesTags: ['Review', 'Activity', 'Overview'],
+    }),
+    snoozeReviewItem: build.mutation<ReviewItem, { id: number; days?: number }>({
+      query: ({ id, days = 1 }) => ({
+        url: `review-items/${id}/snooze/`,
+        method: 'POST',
+        body: { days },
+      }),
+      invalidatesTags: ['Review', 'Overview'],
     }),
 
     // -- roster ---------------------------------------------------------- //
@@ -209,6 +233,13 @@ export const caricueApi = createApi({
     deleteActivity: build.mutation<void, number>({
       query: (id) => ({ url: `activities/${id}/`, method: 'DELETE' }),
       invalidatesTags: ['Activity', 'Overview'],
+    }),
+    uploadQuestionImage: build.mutation<QuestionImageUpload, File>({
+      query: (file) => {
+        const form = new FormData();
+        form.append('file', file);
+        return { url: 'question-images/', method: 'POST', body: form, formData: true };
+      },
     }),
     importActivity: build.mutation<ActivityImportResult, { classroom: number; file: File }>({
       query: ({ classroom, file }) => {
@@ -380,6 +411,10 @@ export const {
   useUpdateClassroomMutation,
   useDeleteClassroomMutation,
   useTopicTimelineQuery,
+  useReviewScheduleQuery,
+  useDueReviewsQuery,
+  useCreateReviewActivityMutation,
+  useSnoozeReviewItemMutation,
   useRosterQuery,
   useAddStudentToClassMutation,
   useImportRosterMutation,
@@ -389,6 +424,7 @@ export const {
   useCreateActivityMutation,
   useUpdateActivityMutation,
   useDeleteActivityMutation,
+  useUploadQuestionImageMutation,
   useImportActivityMutation,
   useLaunchSessionMutation,
   useSessionsQuery,

@@ -22,6 +22,7 @@ import {
 } from '@/api/caricueApi';
 import { errorMessage, fieldErrors } from '@/api/baseQuery';
 import { ErrorState, LoadingState } from '@/components/StateViews';
+import { useTourSegment } from '@/tour/useTour';
 
 /**
  * Create or edit a class. Same form either way; `id` decides the mode.
@@ -44,6 +45,7 @@ export function ClassFormPage() {
 }
 
 function ClassForm({ classroom }: { classroom?: Classroom }) {
+  useTourSegment('class');
   const navigate = useNavigate();
   const isEditing = Boolean(classroom);
 
@@ -99,7 +101,7 @@ function ClassForm({ classroom }: { classroom?: Classroom }) {
               <ErrorState message={errorMessage(mutationError)} />
             )}
 
-            <FormControl isInvalid={Boolean(nameProblem)} isRequired>
+            <FormControl isInvalid={Boolean(nameProblem)} isRequired data-tour="class-name">
               <FormLabel htmlFor="class-name">Class name</FormLabel>
               <Input
                 id="class-name"
@@ -111,7 +113,7 @@ function ClassForm({ classroom }: { classroom?: Classroom }) {
               <FormErrorMessage>{nameProblem}</FormErrorMessage>
             </FormControl>
 
-            <FormControl isInvalid={Boolean(fields.subject)}>
+            <FormControl isInvalid={Boolean(fields.subject)} data-tour="class-subject">
               <FormLabel htmlFor="class-subject">Subject</FormLabel>
               <Input
                 id="class-subject"
@@ -165,12 +167,17 @@ function ClassForm({ classroom }: { classroom?: Classroom }) {
             )}
 
             <Text fontSize="sm" color="gray.600">
-              ClassSortie stores the minimum information needed to run a formative check. You add
-              students in the next step.
+              ClassSortie stores the minimum information needed to run a formative check. You
+              add students in the next step.
             </Text>
 
             <HStack>
-              <Button type="submit" isLoading={isSaving} loadingText="Saving…">
+              <Button
+                type="submit"
+                isLoading={isSaving}
+                loadingText="Saving…"
+                data-tour="class-save"
+              >
                 {isEditing ? 'Save changes' : 'Create class'}
               </Button>
               <Button variant="ghost" onClick={() => navigate('/app/classes')} type="button">

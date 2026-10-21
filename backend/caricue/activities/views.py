@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
-from rest_framework import serializers, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from caricue.classroom.models import Classroom
 from caricue.core.permissions import OwnedQuerysetMixin
+from caricue.core.throttling import ImageUploadThrottle
 from caricue.live.models import LiveSession, SessionStatus
 from caricue.live.serializers import LiveSessionSerializer
 from caricue.live.services import launch_session
@@ -19,12 +21,13 @@ from .activity_export import (
     export_activity_json,
 )
 from .activity_import import ActivityImportError, import_activity_file
-from .models import Activity, Choice, Question
+from .models import Activity, Choice, Question, QuestionImage
 from .serializers import (
     ActivityListSerializer,
     ActivityPreviewQuestionSerializer,
     ActivitySerializer,
     ChoiceSerializer,
+    QuestionImageSerializer,
     QuestionSerializer,
 )
 
@@ -54,7 +57,9 @@ class ActivityViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
             .prefetch_related(
                 Prefetch(
                     "questions",
-                    queryset=Question.objects.prefetch_related("choices"),
+                    queryset=Question.objects.select_related("image")
+                    .annotate(responses_total=Count("responses"))
+                    .prefetch_related("choices"),
                 )
             )
             .order_by("-created_at")
@@ -69,7 +74,7 @@ class ActivityViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
     def preview(self, request: Request, pk: str | None = None) -> Response:
         """Renders the activity the way a student will see it."""
         activity = self.get_object()
-        questions = activity.questions.prefetch_related("choices")
+        questions = activity.questions.select_related("image").prefetch_related("choices")
         return Response(
             {
                 "activity": {
@@ -77,6 +82,7 @@ class ActivityViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
                     "title": activity.title,
                     "topic": activity.topic,
                     "status": activity.status,
+                    "kind": activity.kind,
                 },
                 "questions": ActivityPreviewQuestionSerializer(questions, many=True).data,
             }
@@ -180,7 +186,9 @@ class QuestionViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
     """
 
     serializer_class = QuestionSerializer
-    queryset = Question.objects.select_related("activity").prefetch_related("choices")
+    queryset = Question.objects.select_related("activity", "image").prefetch_related(
+        "choices"
+    )
     owner_field = "activity__teacher"
 
     def get_queryset(self):
@@ -189,6 +197,36 @@ class QuestionViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
         if activity_id:
             queryset = queryset.filter(activity_id=activity_id)
         return queryset
+
+
+class QuestionImageViewSet(
+    OwnedQuerysetMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Upload-first question images (multipart `file`).
+
+    Returns the new image's `id` and same-origin `url`; the builder then sends
+    `image_id` with the question. Owner-scoped like every other teacher
+    resource.
+    """
+
+    serializer_class = QuestionImageSerializer
+    queryset = QuestionImage.objects.all()
+    parser_classes = [MultiPartParser]
+    throttle_classes = [ImageUploadThrottle]
+
+    def get_throttles(self):
+        # Only uploads are rate limited; reading and deleting are cheap.
+        if self.action == "create":
+            return super().get_throttles()
+        return []
+
+    def perform_destroy(self, instance: QuestionImage) -> None:
+        instance.file.delete(save=False)  # remove the bytes, not just the row
+        instance.delete()
 
 
 class ChoiceViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):

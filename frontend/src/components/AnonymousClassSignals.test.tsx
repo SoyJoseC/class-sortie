@@ -3,9 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { AnonymousClassSignals } from './AnonymousClassSignals';
 import type { SessionFacts } from '@/api/types';
 
-function minimalFacts(
-  overrides: Partial<SessionFacts> = {}
-): SessionFacts {
+function minimalFacts(overrides: Partial<SessionFacts> = {}): SessionFacts {
   return {
     kind: 'fact',
     session_id: 1,
@@ -27,7 +25,7 @@ function minimalFacts(
     high_confidence_incorrect: [],
     low_confidence_correct: [],
     needs_attention: [],
-    has_confidence_data: false,
+    has_confidence_data: true,
     has_auto_scored_data: true,
     ...overrides,
   };

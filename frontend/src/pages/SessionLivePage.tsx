@@ -39,6 +39,7 @@ import {
   formatPercent,
   formatRelativeTime,
 } from '@/utils/insightFormat';
+import { useTourSegment } from '@/tour/useTour';
 
 /** Fallback until the server tells us its configured cadence. */
 const DEFAULT_POLL_SECONDS = 4;
@@ -51,6 +52,7 @@ const DEFAULT_POLL_SECONDS = 4;
  * networks and simple reverse-proxy setups without extra infrastructure.
  */
 export function SessionLivePage() {
+  useTourSegment('reflection');
   const { id } = useParams<{ id: string }>();
   const sessionId = Number(id);
   const toast = useToast();
@@ -86,6 +88,7 @@ export function SessionLivePage() {
 
   const { session, facts, suggestions, misconception_cards, comparison } = data;
   const isOpen = session.status === 'open';
+  const survey = facts.activity_kind === 'survey' || session.activity_kind === 'survey';
 
   async function handleClose() {
     try {
@@ -101,11 +104,16 @@ export function SessionLivePage() {
   }
 
   return (
-    <VStack spacing={5} align="stretch">
+    <VStack spacing={5} align="stretch" data-tour="session-live">
       <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
         <Box>
           <HStack>
             <Heading size="lg">{session.activity_title}</Heading>
+            {survey && (
+              <Badge colorScheme="ocean" variant="subtle">
+                Survey
+              </Badge>
+            )}
             <Badge colorScheme={isOpen ? 'cariteal' : 'gray'} variant="solid">
               {session.status}
             </Badge>
@@ -208,8 +216,9 @@ export function SessionLivePage() {
           <AlertIcon />
           <Box>
             <Text>
-              This session is closed. The last step of the loop is deciding what to do with the
-              evidence.
+              {survey
+                ? 'This survey is closed. You can jot down anything you noticed, or skip this.'
+                : 'This session is closed. The last step of the loop is deciding what to do with the evidence.'}
             </Text>
             <Button
               as={Link}
@@ -240,27 +249,39 @@ export function SessionLivePage() {
           }
           accent="cariteal"
         />
-        <StatTile
-          label="Auto-scored correct"
-          value={formatPercent(facts.overall_correctness_percentage)}
-          help={
-            facts.has_auto_scored_data
-              ? `${facts.auto_scored_response_count} scored answers`
-              : 'No auto-scored questions answered yet'
-          }
-          accent="coral"
-        />
-        <StatTile
-          label="Average confidence"
-          value={formatConfidence(facts.average_confidence)}
-          help={facts.has_confidence_data ? 'Self-reported, 1-5' : 'Not collected'}
-          accent="gray"
-        />
+        {!survey && (
+          <StatTile
+            label="Auto-scored correct"
+            value={formatPercent(facts.overall_correctness_percentage)}
+            help={
+              facts.has_auto_scored_data
+                ? `${facts.auto_scored_response_count} scored answers`
+                : 'No auto-scored questions answered yet'
+            }
+            accent="coral"
+          />
+        )}
+        {!survey && (
+          <StatTile
+            label="Average confidence"
+            value={formatConfidence(facts.average_confidence)}
+            help={facts.has_confidence_data ? 'Self-reported, 1-5' : 'Not collected'}
+            accent="gray"
+          />
+        )}
+        {survey && (
+          <StatTile
+            label="Responses"
+            value={String(facts.submitted_count)}
+            help="Unmarked — there is no score"
+            accent="ocean"
+          />
+        )}
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, xl: 3 }} spacing={5}>
         <VStack spacing={5} align="stretch" gridColumn={{ xl: 'span 2' }}>
-          {facts.lowest_correctness_questions.length > 0 && (
+          {!survey && facts.lowest_correctness_questions.length > 0 && (
             <Card borderWidth="1px" borderColor="sand.200">
               <CardBody>
                 <HStack justify="space-between" mb={3}>
@@ -303,7 +324,11 @@ export function SessionLivePage() {
             </Heading>
             <VStack spacing={4} align="stretch">
               {facts.questions.map((question) => (
-                <QuestionInsightCard key={question.question_id} question={question} />
+                <QuestionInsightCard
+                  key={question.question_id}
+                  question={question}
+                  survey={survey}
+                />
               ))}
             </VStack>
           </Box>
@@ -327,17 +352,14 @@ export function SessionLivePage() {
             </Card>
           )}
 
-          {!isOpen && comparison && (
+          {!survey && !isOpen && comparison && (
             <SessionComparisonPanel comparison={comparison} classroomId={session.classroom} />
           )}
-          {facts.submitted_count > 0 && (
-            <MisconceptionCardPanel
-              sessionId={sessionId}
-              cards={misconception_cards ?? []}
-            />
+          {!survey && facts.submitted_count > 0 && (
+            <MisconceptionCardPanel sessionId={sessionId} cards={misconception_cards ?? []} />
           )}
-          <AttentionPanel facts={facts} />
-          <SuggestionPanel suggestions={suggestions} />
+          {!survey && <AttentionPanel facts={facts} />}
+          {!survey && <SuggestionPanel suggestions={suggestions} />}
         </VStack>
       </SimpleGrid>
     </VStack>

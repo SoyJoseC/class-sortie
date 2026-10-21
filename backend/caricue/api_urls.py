@@ -20,6 +20,7 @@ from caricue.activities import views as activity_views
 from caricue.classroom import views as classroom_views
 from caricue.core import views as core_views
 from caricue.live import views as live_views
+from caricue.reviews import views as review_views
 
 router = DefaultRouter()
 router.register("classrooms", classroom_views.ClassroomViewSet, basename="classroom")
@@ -28,8 +29,12 @@ router.register("enrollments", classroom_views.EnrollmentViewSet, basename="enro
 router.register("activities", activity_views.ActivityViewSet, basename="activity")
 router.register("questions", activity_views.QuestionViewSet, basename="question")
 router.register("choices", activity_views.ChoiceViewSet, basename="choice")
+router.register(
+    "question-images", activity_views.QuestionImageViewSet, basename="questionimage"
+)
 router.register("sessions", live_views.LiveSessionViewSet, basename="livesession")
 router.register("reflections", live_views.TeacherReflectionViewSet, basename="reflection")
+router.register("review-items", review_views.ReviewItemViewSet, basename="reviewitem")
 
 auth_patterns = [
     path("csrf/", account_views.csrf, name="auth-csrf"),
@@ -78,6 +83,7 @@ urlpatterns = [
     path("auth/", include(auth_patterns)),
     path("public/", include(public_patterns)),
     path("overview/", live_views.TeacherOverviewView.as_view(), name="teacher-overview"),
+    path("review/due/", review_views.DueReviewsView.as_view(), name="review-due"),
     path(
         "roster-template.csv",
         classroom_views.roster_csv_template,

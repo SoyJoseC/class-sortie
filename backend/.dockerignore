@@ -9,6 +9,7 @@ htmlcov/
 .coverage
 db.sqlite3
 staticfiles/
+media/
 *.log
 .env
 .env.*

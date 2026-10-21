@@ -3,7 +3,13 @@ from __future__ import annotations
 from django.conf import settings
 from rest_framework import serializers
 
-from caricue.activities.models import CONFIDENCE_MAX, CONFIDENCE_MIN, Question
+from caricue.activities.models import (
+    CONFIDENCE_MAX,
+    CONFIDENCE_MIN,
+    RATING_MAX,
+    RATING_MIN,
+    Question,
+)
 
 from .models import (
     IdentityMode,
@@ -19,6 +25,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
 
     activity_title = serializers.CharField(source="activity.title", read_only=True)
     activity_topic = serializers.CharField(source="activity.topic", read_only=True)
+    activity_kind = serializers.CharField(source="activity.kind", read_only=True)
     classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     join_url = serializers.CharField(read_only=True)
     roster_size = serializers.IntegerField(read_only=True)
@@ -34,6 +41,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
             "activity",
             "activity_title",
             "activity_topic",
+            "activity_kind",
             "classroom",
             "classroom_name",
             "code",
@@ -139,6 +147,7 @@ class ParticipantResponseSerializer(serializers.ModelSerializer):
     selected_choice_text = serializers.CharField(
         source="selected_choice.text", read_only=True, default=None
     )
+    selected_choice_texts = serializers.SerializerMethodField()
 
     class Meta:
         model = Response
@@ -150,12 +159,17 @@ class ParticipantResponseSerializer(serializers.ModelSerializer):
             "question_type",
             "selected_choice",
             "selected_choice_text",
+            "selected_choice_texts",
+            "rating_value",
             "text_response",
             "confidence_value",
             "is_correct",
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_selected_choice_texts(self, response: Response) -> list[str]:
+        return [choice.text for choice in response.selected_choices.all()]
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -192,6 +206,7 @@ class PublicChoiceSerializer(serializers.Serializer):
 
 class PublicQuestionSerializer(serializers.ModelSerializer):
     choices = serializers.SerializerMethodField()
+    image_url = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = Question
@@ -199,7 +214,11 @@ class PublicQuestionSerializer(serializers.ModelSerializer):
             "id",
             "position",
             "prompt",
+            "image_url",
+            "image_alt",
             "question_type",
+            "rating_low_label",
+            "rating_high_label",
             "is_required",
             "collect_confidence",
             "choices",
@@ -219,6 +238,7 @@ class PublicSessionSerializer(serializers.ModelSerializer):
 
     activity_title = serializers.CharField(source="activity.title", read_only=True)
     activity_topic = serializers.CharField(source="activity.topic", read_only=True)
+    activity_kind = serializers.CharField(source="activity.kind", read_only=True)
     class_name = serializers.CharField(source="classroom.name", read_only=True)
     questions = serializers.SerializerMethodField()
     is_open = serializers.BooleanField(read_only=True)
@@ -234,6 +254,7 @@ class PublicSessionSerializer(serializers.ModelSerializer):
             "identity_mode",
             "activity_title",
             "activity_topic",
+            "activity_kind",
             "class_name",
             "questions",
             "confidence_scale",
@@ -241,8 +262,10 @@ class PublicSessionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_questions(self, session: LiveSession) -> list[dict]:
-        questions = session.activity.questions.prefetch_related("choices").order_by(
-            "position"
+        questions = (
+            session.activity.questions.select_related("image")
+            .prefetch_related("choices")
+            .order_by("position")
         )
         return PublicQuestionSerializer(questions, many=True).data
 
@@ -263,6 +286,15 @@ class PublicJoinSerializer(serializers.Serializer):
 class PublicAnswerSerializer(serializers.Serializer):
     question = serializers.IntegerField()
     selected_choice = serializers.IntegerField(required=False, allow_null=True)
+    selected_choices = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+        max_length=50,
+    )
+    rating_value = serializers.IntegerField(
+        required=False, allow_null=True, min_value=RATING_MIN, max_value=RATING_MAX
+    )
     text_response = serializers.CharField(
         required=False, allow_blank=True, max_length=1000
     )

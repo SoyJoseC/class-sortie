@@ -34,18 +34,25 @@ shorten the gap between *checking* understanding and *deciding* what to teach.
 
 **Teacher (needs an account)**
 
-1. Create a class and add students by hand or by CSV import.
-2. Build an activity of one to five questions: multiple choice, short text, or
-   a 1–5 confidence scale, with optional confidence collection per question.
+1. Create a class and add students by hand or by CSV import. A first-run tour
+   (replayable from the account menu) walks through class, activity, and the
+   next-step note.
+2. Build a quiz or an unmarked survey of as many questions as you need. Any
+   question can include a picture. Quizzes support multiple choice, short text,
+   and a 1–5 confidence scale. Surveys add multi-select and rating, and can
+   collect answers anonymously.
 3. Preview the student view, save as a draft, or launch immediately.
 4. Project a QR code and a six-character code.
 5. Watch results arrive on a dashboard that polls every few seconds.
 6. Close the session and record the gap they saw and the action they will take.
+7. Topics that need another look appear as due-for-review cards. One click
+   drafts a short recap quiz on the class schedule.
 
 **Student (needs nothing)**
 
 1. Scan the QR code or type the code at `/join`.
 2. Enter a display name or the roster identifier the teacher assigned.
+   Anonymous surveys skip the name.
 3. Answer the questions on one screen.
 4. Submit once and see a confirmation.
 
@@ -60,14 +67,16 @@ ClassSortie/
 │       ├── core/             health, config, permissions, throttles, errors
 │       ├── accounts/         Teacher (email login), session auth endpoints
 │       ├── classroom/        Classroom, Student, Enrollment, CSV import
-│       ├── activities/       Activity, Question, Choice, launch rules
+│       ├── activities/       Activity, Question, Choice, images, launch rules
 │       ├── live/             LiveSession, Participant, Response, Reflection
+│       ├── reviews/          class-level Leitner schedule and review drafts
 │       └── insights/         deterministic insight service + AI providers
 ├── frontend/                 React 18 + TypeScript + Vite + Chakra UI
 │   └── src/
 │       ├── api/              RTK Query client, CSRF handling, API types
 │       ├── components/       layout, insight panels, question editor
 │       ├── pages/            teacher screens + public student screens
+│       ├── tour/             first-run and replayable onboarding
 │       └── utils/            insight formatting, activity-draft validation
 ├── deploy/
 │   ├── nginx/caricue.conf    production reverse proxy + SPA fallback
@@ -185,11 +194,12 @@ python manage.py seed_demo            # idempotent
 python manage.py seed_demo --reset    # delete and rebuild the demo teacher
 ```
 
-It creates one teacher, one IT class with ten fictional students, a five-question
-activity on hardware and networking, a **baseline closed** session with eight
+It creates one teacher, one IT class with ten fictional students, a quiz
+on hardware and networking, a **baseline closed** session with eight
 submissions and a reflection, a **follow-up closed** session (linked via
-`follow_up_of_session`) with improved scores for comparison demo, and one
-**open** session for demonstrating the QR flow.
+`follow_up_of_session`) with improved scores for comparison demo, a
+**due-for-review** card on that topic, and one **open** session for
+demonstrating the QR flow.
 
 > **Development credentials** — for local use only.
 >
@@ -211,7 +221,7 @@ finishes.
 **Backend** (from `backend/`, with the virtualenv active)
 
 ```bash
-python -m pytest                  # 232 tests
+python -m pytest                  # 312 tests
 python -m ruff check .            # lint
 python -m ruff format --check .   # formatting
 ```
@@ -222,7 +232,7 @@ No PostgreSQL server is required to run them.
 **Frontend** (from `frontend/`)
 
 ```bash
-npm test              # 82 tests (Vitest + React Testing Library)
+npm test              # 108 tests (Vitest + React Testing Library)
 npm run typecheck     # tsc --noEmit
 npm run lint          # ESLint
 npm run build         # production build (type-checks, then bundles)
@@ -273,11 +283,12 @@ The public session payload deliberately omits `is_correct` and
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/overview/` | Dashboard: classes, activities, open sessions, recent results, pending follow-ups |
+| `GET` | `/api/overview/` | Dashboard: classes, activities, open sessions, recent results, pending follow-ups, due reviews |
 | `GET` `POST` | `/api/classrooms/` | List and create classes |
 | `GET` `PATCH` `DELETE` | `/api/classrooms/{id}/` | Retrieve, edit, delete a class |
 | `GET` | `/api/classrooms/{id}/roster/` | Enrolments for one class |
 | `GET` | `/api/classrooms/{id}/topic-timeline/` | Closed sessions grouped by normalised topic |
+| `GET` | `/api/classrooms/{id}/review-schedule/` | Leitner review cards for one class |
 | `POST` | `/api/classrooms/{id}/students/` | Add a student and enrol them |
 | `POST` | `/api/classrooms/{id}/import-roster/` | CSV roster import (multipart) |
 | `GET` | `/api/roster-template.csv` | Sample CSV to fill in |
@@ -293,6 +304,10 @@ The public session payload deliberately omits `is_correct` and
 | `GET` | `/api/activities/{id}/export.json/` | Export activity as JSON |
 | `GET` | `/api/activities/{id}/sessions/` | Sessions launched from an activity |
 | `GET` `POST` | `/api/questions/`, `/api/choices/` | Question and choice management |
+| `POST` `GET` `DELETE` | `/api/question-images/` | Upload, fetch, or delete a question picture |
+| `GET` | `/api/review/due/` | Review cards due across the teacher's classes |
+| `POST` | `/api/review-items/{id}/create-activity/` | Draft a review quiz from a card |
+| `POST` | `/api/review-items/{id}/snooze/` | Push the next check back |
 | `GET` | `/api/sessions/?status=open` | List sessions, filterable |
 | `POST` | `/api/sessions/{id}/close/` | Close a session; blocks further submissions |
 | `GET` | `/api/sessions/{id}/dashboard/` | **Poll this**: facts, suggestions, misconception cards; comparison when closed |
@@ -475,7 +490,9 @@ Caddy obtains the certificate and sets the forwarding headers itself.
 ## Backup and restore
 
 Dumps contain student names. Keep them encrypted at rest and off version
-control — `.gitignore` already excludes `deploy/backups/`.
+control — `.gitignore` already excludes `deploy/backups/`. Question pictures
+live on the `caricue_media` volume (`DJANGO_MEDIA_ROOT`); copy that directory
+alongside the database dump.
 
 ```bash
 ./deploy/backup.sh                                    # → deploy/backups/caricue-<timestamp>.dump
@@ -549,7 +566,7 @@ Where to add them:
 | Gradebook export | A read-only serializer over `live/insights` — nothing in the schema needs to change |
 | Real-time dashboard | Swap the poll in `SessionLivePage` for a subscription; the dashboard payload is already a single self-contained snapshot |
 | A real LLM | Implement the client that `LLMInsightProvider` takes, and set `CARICUE_INSIGHT_PROVIDER` |
-| Extra question types | Add to `QuestionType`, then extend `score_answer` and the insight aggregation — both switch on the type in one place |
+| Extra question types | Add to `QuestionType`, then extend `score_answer` and the insight aggregation — both switch on the type in one place. Surveys already have multi-select and rating. |
 | Notifications | New app subscribing to session close; keep it out of the request path |
 | Multi-school tenancy | `Teacher` gains an organisation FK; owner filtering already funnels through `OwnedQuerysetMixin` |
 

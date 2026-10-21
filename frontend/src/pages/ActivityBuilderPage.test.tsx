@@ -85,7 +85,7 @@ describe('ActivityBuilderPage', () => {
     expect(
       await screen.findByRole('heading', { name: /create an activity/i })
     ).toBeInTheDocument();
-    expect(screen.getByText('Questions (1/5)')).toBeInTheDocument();
+    expect(screen.getByText('Questions (1)')).toBeInTheDocument();
     expect(screen.getByLabelText(/choice 1 text/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/choice 2 text/i)).toBeInTheDocument();
   });
@@ -137,6 +137,7 @@ describe('ActivityBuilderPage', () => {
       classroom: CLASSROOM.id,
       title: 'Networking check',
       topic: 'Switches and routers',
+      kind: 'quiz',
       status: 'draft',
     });
 
@@ -149,15 +150,46 @@ describe('ActivityBuilderPage', () => {
     ]);
   });
 
-  it('caps an activity at five questions', async () => {
+  it('lets the teacher add well beyond five questions', async () => {
     const user = userEvent.setup();
     renderBuilder();
 
     const add = await screen.findByRole('button', { name: /add question/i });
-    for (let i = 0; i < 4; i += 1) await user.click(add);
+    for (let i = 0; i < 7; i += 1) await user.click(add);
 
-    expect(screen.getByText('Questions (5/5)')).toBeInTheDocument();
-    expect(add).toBeDisabled();
+    expect(screen.getByText('Questions (8)')).toBeInTheDocument();
+    expect(add).toBeEnabled();
+  });
+
+  it('stops adding questions at the cap the server publishes', async () => {
+    const user = userEvent.setup();
+    stubFetch((url) => {
+      if (url.includes('/config/')) {
+        return {
+          body: { min_questions: 1, max_questions: 3, max_choices: 6 },
+        };
+      }
+      if (url.includes('/classrooms/')) {
+        return { body: { count: 1, next: null, previous: null, results: [CLASSROOM] } };
+      }
+      return { body: {} };
+    });
+    renderWithProviders(
+      <Routes>
+        <Route path="/app/activities/new" element={<ActivityBuilderPage />} />
+      </Routes>,
+      { route: '/app/activities/new' }
+    );
+
+    const add = await screen.findByRole('button', { name: /add question/i });
+    await waitFor(async () => {
+      await user.click(add);
+      expect(screen.getAllByLabelText('Prompt').length).toBeGreaterThan(1);
+    });
+    await user.click(add);
+
+    await waitFor(() => expect(add).toBeDisabled());
+    expect(screen.getByText('Questions (3)')).toBeInTheDocument();
   });
 
   it('swaps the answer key when the question type changes', async () => {
@@ -222,5 +254,25 @@ describe('ActivityBuilderPage', () => {
       within(preview).getByText(/1\. Which device routes between networks\?/)
     ).toBeInTheDocument();
     expect(within(preview).getByText('Router')).toBeInTheDocument();
+  });
+
+  it('saves a survey without an answer key and offers anonymous join', async () => {
+    const user = userEvent.setup();
+    const { bodies } = renderBuilder();
+
+    setValue(await screen.findByLabelText(/^title/i), 'Unit feedback');
+    await user.click(screen.getByRole('radio', { name: /survey/i }));
+    setValue(screen.getByLabelText('Prompt'), 'Which topics were useful?');
+    setValue(screen.getByLabelText(/choice 1 text/i), 'Cabling');
+    setValue(screen.getByLabelText(/choice 2 text/i), 'Wi-Fi');
+    expect(screen.queryByLabelText(/is correct/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /anonymous/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0].body).toMatchObject({ kind: 'survey' });
+    const questions = bodies[0].body.questions as { choices: { is_correct: boolean }[] }[];
+    expect(questions[0].choices.every((choice) => !choice.is_correct)).toBe(true);
   });
 });

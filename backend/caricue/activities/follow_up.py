@@ -29,6 +29,8 @@ def create_follow_up_activity(
     """Create a draft activity targeting weak areas from a session."""
     if session.activity.teacher_id != teacher.pk:
         raise PermissionError("Session not owned by teacher.")
+    if session.activity.is_survey:
+        raise ValueError("A survey is not scored, so it has no follow-up to draft.")
 
     insights = build_session_insights(session)
     cards = build_misconception_cards(insights)
@@ -66,9 +68,7 @@ def create_follow_up_activity(
             continue
 
         if source.question_type == QuestionType.MULTIPLE_CHOICE:
-            _create_mcq_follow_up(
-                follow_up, source, session, position, card.question_id
-            )
+            _create_mcq_follow_up(follow_up, source, session, position, card.question_id)
             position += 1
         elif source.question_type == QuestionType.SHORT_TEXT:
             _create_short_text_follow_up(
@@ -76,11 +76,7 @@ def create_follow_up_activity(
             )
             position += 1
 
-    if (
-        include_confidence
-        and position <= max_questions
-        and insights.has_confidence_data
-    ):
+    if include_confidence and position <= max_questions and insights.has_confidence_data:
         topic_label = activity.topic or activity.title
         Question.objects.create(
             activity=follow_up,
@@ -101,9 +97,7 @@ def _create_mcq_follow_up(
     source_question_id: int,
 ) -> Question:
     correct = source.choices.filter(is_correct=True).first()
-    top_wrong = (
-        source.choices.filter(is_correct=False).order_by("position").first()
-    )
+    top_wrong = source.choices.filter(is_correct=False).order_by("position").first()
     question = Question.objects.create(
         activity=follow_up,
         position=position,

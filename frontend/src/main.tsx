@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ChakraProvider, ColorModeScript } from '@chakra-ui/react';
 import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
+import 'driver.js/dist/driver.css';
 import { App } from './App';
 import { store } from './store';
 import { theme } from './theme';

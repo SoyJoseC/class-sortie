@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Activity, Choice, Question
+from .models import Activity, Choice, Question, QuestionImage
 
 
 class ChoiceInline(admin.TabularInline):
@@ -21,6 +21,12 @@ class ActivityAdmin(admin.ModelAdmin):
     search_fields = ["title", "topic"]
     autocomplete_fields = ["teacher", "classroom"]
     inlines = [QuestionInline]
+
+
+@admin.register(QuestionImage)
+class QuestionImageAdmin(admin.ModelAdmin):
+    list_display = ["id", "teacher", "width", "height", "created_at"]
+    raw_id_fields = ["teacher"]
 
 
 @admin.register(Question)

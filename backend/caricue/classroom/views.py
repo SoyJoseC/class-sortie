@@ -142,6 +142,17 @@ class ClassroomViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
         classroom = self.get_object()
         return Response(build_topic_timeline(classroom))
 
+    @action(detail=True, methods=["get"], url_path="review-schedule")
+    def review_schedule(self, request: Request, pk: str | None = None) -> Response:
+        from caricue.reviews.models import ReviewItem
+        from caricue.reviews.serializers import ReviewItemSerializer
+
+        classroom = self.get_object()
+        items = ReviewItem.objects.filter(classroom=classroom).select_related(
+            "last_session"
+        )
+        return Response(ReviewItemSerializer(items, many=True).data)
+
 
 class StudentViewSet(OwnedQuerysetMixin, viewsets.ModelViewSet):
     serializer_class = StudentSerializer
